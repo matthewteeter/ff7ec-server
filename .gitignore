@@ -1,0 +1,21 @@
+# Private captured account/session data
+captures/
+gaps/
+*.mitm
+
+# Locally generated TLS keys and certificates
+certs/
+*.pfx
+*.cer
+
+# Runtime logs
+*.log
+
+# .NET and Visual Studio output
+.vs/
+**/bin/
+**/obj/
+
+# Python cache
+__pycache__/
+*.pyc

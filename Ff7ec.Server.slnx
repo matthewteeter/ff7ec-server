@@ -1,0 +1,6 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Ff7ec.Server/Ff7ec.Server.csproj" />
+  </Folder>
+  <Project Path="../FF7EC-CostumeViewer/src/Ff7ec.Octo/Ff7ec.Octo.csproj" />
+</Solution>
