@@ -1,6 +1,7 @@
 # Private captured account/session data
 captures/
 gaps/
+data/
 *.mitm
 
 # Locally generated TLS keys and certificates

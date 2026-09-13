@@ -9,6 +9,7 @@ int listenPort = config.GetValue("ListenPort", 443);
 string capturesDir = config["CapturesDirectory"] ?? throw new InvalidOperationException("Ff7ec:CapturesDirectory not configured");
 string certDir = config["CertDirectory"] ?? throw new InvalidOperationException("Ff7ec:CertDirectory not configured");
 string gapsDir = config["GapsDirectory"] ?? throw new InvalidOperationException("Ff7ec:GapsDirectory not configured");
+string dataDir = config["DataDirectory"] ?? throw new InvalidOperationException("Ff7ec:DataDirectory not configured");
 string[] hostNames = config.GetSection("Hostnames").Get<string[]>()
     ?? throw new InvalidOperationException("Ff7ec:Hostnames not configured");
 
@@ -29,12 +30,18 @@ builder.WebHost.ConfigureKestrel(options =>
 
 builder.Services.AddSingleton(sp => new ReplayStore(sp.GetRequiredService<ILogger<ReplayStore>>(), capturesDir));
 builder.Services.AddSingleton(sp => new GapLogger(sp.GetRequiredService<ILogger<GapLogger>>(), gapsDir));
+builder.Services.AddSingleton(sp => new PartySettingsStore(sp.GetRequiredService<ILogger<PartySettingsStore>>(), dataDir));
+builder.Services.AddSingleton(sp => new PartyStateMerger(
+    sp.GetRequiredService<PartySettingsStore>(),
+    sp.GetRequiredService<ILogger<PartyStateMerger>>()));
 
 var app = builder.Build();
 
 // Force-load the store at startup (rather than on first request) so load errors and the
 // captured-response count show up immediately in the console.
 var store = app.Services.GetRequiredService<ReplayStore>();
+var partySettingsStore = app.Services.GetRequiredService<PartySettingsStore>();
+var partyStateMerger = app.Services.GetRequiredService<PartyStateMerger>();
 app.Logger.LogInformation("FF7EC offline server ready - {Count} captured responses loaded, listening on :{Port} for {Hosts}",
     store.Count, listenPort, string.Join(", ", hostNames));
 
@@ -47,6 +54,12 @@ var suppressedHeaders = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
     "Via", "X-Cache", "X-Amz-Cf-Pop", "X-Amz-Cf-Id", "Date",
 };
 
+var writablePartyEndpoints = new HashSet<string>(StringComparer.Ordinal)
+{
+    "/api/pvt/party/multi/set/upsert",
+    "/api/pvt/party/solo/set/upsert",
+};
+
 app.Run(async context =>
 {
     var request = context.Request;
@@ -57,6 +70,64 @@ app.Run(async context =>
     await request.Body.CopyToAsync(bodyStream);
     var bodyBytes = bodyStream.ToArray();
 
+    if (HttpMethods.IsPost(request.Method) &&
+        writablePartyEndpoints.Contains(request.Path.Value ?? string.Empty))
+    {
+        var userId = request.Query["user_id"].ToString();
+        var contentHash = request.Headers["x-content-hash"].ToString();
+        if (string.IsNullOrWhiteSpace(userId) ||
+            string.IsNullOrWhiteSpace(contentHash) ||
+            bodyBytes.Length == 0)
+        {
+            context.Response.StatusCode = StatusCodes.Status400BadRequest;
+            await context.Response.WriteAsync(
+                "Party-setting writes require nonempty user_id, x-content-hash, and request body.\n");
+            return;
+        }
+
+        await partySettingsStore.AppendAsync(
+            host,
+            request.Path.Value!,
+            pathAndQuery,
+            userId,
+            contentHash,
+            request.ContentType,
+            bodyBytes,
+            context.RequestAborted);
+
+        // The client requested an application-layer encrypted response. An empty HTTP
+        // body (or a fabricated secure hash) is rejected before protobuf parsing, so use
+        // a captured small success response as an opaque encryption envelope. Its
+        // protobuf payload has no required fields and unknown fields are ignored by the
+        // party-upsert response type.
+        var responseTemplatePath =
+            $"/api/pvt/store/purchase/restart/steam?user_id={Uri.EscapeDataString(userId)}";
+        if (!store.TryGet(host, HttpMethods.Post, responseTemplatePath, out var responseTemplate))
+        {
+            app.Logger.LogError(
+                "PARTY WRITE persisted but response template is missing: {Method} {Host}{Path}",
+                HttpMethods.Post, host, responseTemplatePath);
+            context.Response.StatusCode = StatusCodes.Status503ServiceUnavailable;
+            await context.Response.WriteAsync(
+                "Party settings were saved, but no encrypted success-response template is available.\n");
+            return;
+        }
+
+        context.Response.StatusCode = responseTemplate.StatusCode;
+        foreach (var header in responseTemplate.ResponseHeaders)
+        {
+            if (suppressedHeaders.Contains(header.Name)) continue;
+            context.Response.Headers[header.Name] = header.Value;
+        }
+
+        app.Logger.LogInformation(
+            "PARTY WRITE ACK {Host}{Path} -> {Status} ({Bytes} bytes) using {Template}",
+            host, request.Path, responseTemplate.StatusCode, responseTemplate.Body.Length,
+            Path.GetFileName(responseTemplate.SourceFile));
+        await context.Response.Body.WriteAsync(responseTemplate.Body);
+        return;
+    }
+
     if (store.TryGet(host, request.Method, pathAndQuery, out var captured))
     {
         context.Response.StatusCode = captured.StatusCode;
@@ -65,9 +136,23 @@ app.Run(async context =>
             if (suppressedHeaders.Contains(header.Name)) continue;
             context.Response.Headers[header.Name] = header.Value;
         }
+        // Replay the captured response first, then rewrite its encrypted protobuf
+        // envelope with the latest state received through the write endpoint.
+        var responseBody = captured.Body;
+        var mergedBody = partyStateMerger.MergeReplayResponse(
+            request, captured.Body, context.Response.Headers);
+        if (mergedBody is not null)
+        {
+            responseBody = mergedBody;
+            context.Response.ContentLength = responseBody.Length;
+            app.Logger.LogInformation(
+                "REPLAY request state overlay applied to {Method} {Host}{Path} ({Bytes} bytes)",
+                request.Method, host, pathAndQuery, responseBody.Length);
+        }
+
         app.Logger.LogInformation("REPLAY {Method} {Host}{Path} -> {Status} ({Bytes} bytes) [{Source}]",
-            request.Method, host, pathAndQuery, captured.StatusCode, captured.Body.Length, Path.GetFileName(captured.SourceFile));
-        await context.Response.Body.WriteAsync(captured.Body);
+            request.Method, host, pathAndQuery, captured.StatusCode, responseBody.Length, Path.GetFileName(captured.SourceFile));
+        await context.Response.Body.WriteAsync(responseBody);
         return;
     }
 

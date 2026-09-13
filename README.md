@@ -17,6 +17,11 @@ once returned for the same request, captured while they were still live.
 3. **Replay**: `src/Ff7ec.Server` is a small ASP.NET Core/Kestrel app that terminates TLS
    itself (using a self-generated, self-signed CA - see `certs/`) and serves back the
    captured response, verbatim, for any request matching a captured key.
+4. **Writable party settings**: the solo and co-op party upsert requests are handled
+   before replay lookup. Their encrypted protobuf request bodies are persisted to
+   `data/party-settings.json`, then acknowledged with a captured encrypted success
+   response. Later incoming replay requests are rewritten from that local state before
+   their response is returned to the game.
 
 ### Why verbatim replay is enough (no decryption needed)
 
@@ -28,6 +33,28 @@ client-side integrity check the game performs still passes - nothing was tampere
 it's the same (body, hash) pair the client already saw once during capture. The tradeoff
 is that this server cannot generate *new* responses to reflect state changes (completing
 a quest, spending currency, etc.) - see Scope below.
+
+### Writable party-setting limits
+
+`POST /api/pvt/party/multi/set/upsert` and
+`POST /api/pvt/party/solo/set/upsert` are narrow exceptions to read-only replay. The server
+stores each accepted request's exact bytes losslessly as Base64, together with its
+`x-content-hash`, host, route, user ID, and timestamp. The write is acknowledged first,
+then later full user-snapshot replay requests are decoded and rewritten from the latest
+local state; that overlay replaces matching user-party and party-member records in the
+replayed user tables. Smaller boot-time responses are left byte-for-byte unchanged. No
+other game state is changed.
+
+Writes are serialized and the JSON file is replaced atomically after its temporary file
+has been flushed to disk. An immediate retry with the same hash and payload as the latest
+record for that host/endpoint/user is acknowledged without appending another copy.
+Malformed existing JSON is treated as an error rather than discarded. The storage
+location is configured by `Ff7ec:DataDirectory`.
+
+Because the client rejects an unencrypted empty response, successful writes reuse the
+captured encrypted response from `POST /api/pvt/store/purchase/restart/steam` as an
+opaque success envelope. That capture must be present for the same user ID; otherwise the
+write remains on disk but the server returns HTTP 503.
 
 ## Scope: "boot + roam"
 
@@ -46,16 +73,18 @@ tools/export_capture_store.py  - .mitm -> captures/ importer
 captures/{host}/        - captured response store (see below)
 certs/                  - auto-generated CA + leaf cert (created on first run)
 gaps/                   - requests with no captured response are logged here for later capture
+data/                   - writable opaque party-setting history
 launcher/               - one-click scripts (see below)
 ```
 
 ## Source-control safety
 
-Do **not** commit the local `captures/`, `certs/`, or `gaps/` directories. Captures contain
-an account-specific numeric user ID, rotating response tokens, and encrypted account-state
-payloads. The `.pfx` files contain private TLS keys. A root `.gitignore` excludes these,
-along with build output and logs. The C# source, launcher scripts, importer, solution, and
-README are safe to commit after confirming ignored files are not force-added.
+Do **not** commit the local `captures/`, `certs/`, `gaps/`, or `data/` directories.
+Captures and writable data contain an account-specific numeric user ID, hashes, and
+encrypted account-state payloads. The `.pfx` files contain private TLS keys. A root
+`.gitignore` excludes these, along with build output and logs. The C# source, launcher
+scripts, importer, solution, and README are safe to commit after confirming ignored files
+are not force-added.
 
 A clone of the source repository will therefore not contain a playable account snapshot;
 each user must privately import their own capture and let the server generate local

@@ -2,6 +2,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\..\FF7EC-CostumeViewer\src\Ff7ec.Octo\Ff7ec.Octo.csproj" />
+    <PackageReference Include="K4os.Compression.LZ4.Streams" Version="1.3.8" />
   </ItemGroup>
 
   <PropertyGroup>
