@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Security.Cryptography;
 using K4os.Compression.LZ4.Streams;
 
@@ -20,6 +21,48 @@ public sealed class PartyStateMerger
     {
         _store = store;
         _logger = logger;
+    }
+
+    /// <summary>
+    /// Creates the party-upsert response patch that the live API would return in
+    /// CommonResponse.User.Update. Applying this patch, including an entity timestamp
+    /// consistent with the frozen replay clock, lets the client refresh its in-memory
+    /// party cache immediately instead of waiting for the next title load.
+    /// </summary>
+    public byte[]? CreateWriteResponse(
+        string endpoint,
+        string userId,
+        byte[] requestBody,
+        IHeaderDictionary responseHeaders)
+    {
+        try
+        {
+            var replayTime = GetReplayTime(responseHeaders);
+            var state = new SavedState();
+            ReadRequest(state, endpoint, requestBody, userId, replayTime);
+            if (state.Members.Count == 0 && state.Parties.Count == 0) return null;
+
+            var tables = new List<ProtoField>();
+            tables.AddRange(state.Parties.Select(bytes => ProtoField.LengthDelimited(UserPartyTable, bytes)));
+            tables.AddRange(state.Members.Select(bytes => ProtoField.LengthDelimited(UserPartyMemberTable, bytes)));
+
+            var user = ProtobufWire.Encode([ProtoField.LengthDelimited(1, ProtobufWire.Encode(tables))]);
+            var common = ProtobufWire.Encode([ProtoField.LengthDelimited(1, user)]);
+            var responseField = endpoint.EndsWith("/multi/set/upsert", StringComparison.Ordinal)
+                ? ApiRequestMultiField : ApiRequestSoloField;
+            var root = new[]
+            {
+                ProtoField.LengthDelimited(101, common),
+                ProtoField.LengthDelimited(responseField, []),
+            };
+
+            return EncodeResponse(ProtobufWire.Encode(root), responseHeaders);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Could not create party cache update response for user {UserId}.", userId);
+            return null;
+        }
     }
 
     /// <summary>
@@ -48,9 +91,6 @@ public sealed class PartyStateMerger
             var records = _store.GetRecords(host, userId);
             if (records.Count == 0) return null;
 
-            var saved = ReadSavedState(records, userId);
-            if (saved.Members.Count == 0 && saved.Parties.Count == 0) return null;
-
             var compressed = Decrypt(capturedBody, ServerApiKey);
             var plain = Decompress(compressed);
             var root = ProtobufWire.Parse(plain);
@@ -69,6 +109,10 @@ public sealed class PartyStateMerger
                     (field.Number == UserPartyTable || field.Number == UserPartyMemberTable)))
                 return null;
 
+            var replayTime = GetReplayTime(responseHeaders);
+            var saved = ReadSavedState(records, userId, replayTime);
+            if (saved.Members.Count == 0 && saved.Parties.Count == 0) return null;
+
             tables = MergeTable(tables, UserPartyTable, saved.Parties, keyField: 2);
             tables = MergeTable(tables, UserPartyMemberTable, saved.Members, keyField: 2);
             user[tablesIndex] = ProtoField.LengthDelimited(1, ProtobufWire.Encode(tables));
@@ -77,9 +121,7 @@ public sealed class PartyStateMerger
             root[root.FindIndex(field => field.Number == 101 && field.WireType == 2)] =
                 ProtoField.LengthDelimited(101, ProtobufWire.Encode(common));
 
-            var updatedCompressed = Compress(ProtobufWire.Encode(root));
-            responseHeaders["X-Content-Hash"] = ToUrlSafeBase64(SHA256.HashData(updatedCompressed));
-            return Encrypt(updatedCompressed, ServerApiKey);
+            return EncodeResponse(ProtobufWire.Encode(root), responseHeaders);
         }
         catch (Exception ex)
         {
@@ -88,24 +130,22 @@ public sealed class PartyStateMerger
         }
     }
 
-    private SavedState ReadSavedState(IReadOnlyList<PartySettingsStore.PartySettingsRecord> records, string userId)
+    private SavedState ReadSavedState(
+        IReadOnlyList<PartySettingsStore.PartySettingsRecord> records,
+        string userId,
+        long replayTime)
     {
         var state = new SavedState();
         foreach (var record in records)
         {
             try
             {
-                var compressed = Decrypt(Convert.FromBase64String(record.BodyBase64), ClientApiKey);
-                var request = ProtobufWire.Parse(Decompress(compressed));
-                var fieldNumber = record.Endpoint.EndsWith("/multi/set/upsert", StringComparison.Ordinal)
-                    ? ApiRequestMultiField : ApiRequestSoloField;
-                var requestField = request.FirstOrDefault(field => field.Number == fieldNumber && field.WireType == 2);
-                if (requestField is null) continue;
-
-                if (fieldNumber == ApiRequestSoloField)
-                    ReadSolo(state, ProtobufWire.Parse(requestField.Value), userId);
-                else
-                    ReadMulti(state, ProtobufWire.Parse(requestField.Value), userId);
+                ReadRequest(
+                    state,
+                    record.Endpoint,
+                    Convert.FromBase64String(record.BodyBase64),
+                    userId,
+                    Math.Min(record.ReceivedAtUtc.ToUnixTimeMilliseconds(), replayTime));
             }
             catch (Exception ex)
             {
@@ -115,7 +155,32 @@ public sealed class PartyStateMerger
         return state;
     }
 
-    private static void ReadSolo(SavedState state, List<ProtoField> fields, string userId)
+    private static void ReadRequest(
+        SavedState state,
+        string endpoint,
+        byte[] body,
+        string userId,
+        long updatedDatetime)
+    {
+        var compressed = Decrypt(body, ClientApiKey);
+        var request = ProtobufWire.Parse(Decompress(compressed));
+        var fieldNumber = endpoint.EndsWith("/multi/set/upsert", StringComparison.Ordinal)
+            ? ApiRequestMultiField : ApiRequestSoloField;
+        var requestField = request.FirstOrDefault(field => field.Number == fieldNumber && field.WireType == 2);
+        if (requestField is null)
+            throw new InvalidDataException($"Party write has no protobuf field {fieldNumber}.");
+
+        if (fieldNumber == ApiRequestSoloField)
+            ReadSolo(state, ProtobufWire.Parse(requestField.Value), userId, updatedDatetime);
+        else
+            ReadMulti(state, ProtobufWire.Parse(requestField.Value), userId, updatedDatetime);
+    }
+
+    private static void ReadSolo(
+        SavedState state,
+        List<ProtoField> fields,
+        string userId,
+        long updatedDatetime)
     {
         var partyId = GetInt64(fields, 1);
         if (partyId is null) return;
@@ -132,11 +197,16 @@ public sealed class PartyStateMerger
         {
             var memberFields = ProtobufWire.Parse(member.Value);
             EnsureVarint(memberFields, 1, ulong.Parse(userId));
+            EnsureVarint(memberFields, 22, (ulong)updatedDatetime);
             state.Members.Add(ProtobufWire.Encode(memberFields));
         }
     }
 
-    private static void ReadMulti(SavedState state, List<ProtoField> fields, string userId)
+    private static void ReadMulti(
+        SavedState state,
+        List<ProtoField> fields,
+        string userId,
+        long updatedDatetime)
     {
         foreach (var wrapper in fields.Where(field => field.Number == 1 && field.WireType == 2))
         {
@@ -145,6 +215,7 @@ public sealed class PartyStateMerger
             if (member is null) continue;
             var memberFields = ProtobufWire.Parse(member.Value);
             EnsureVarint(memberFields, 1, ulong.Parse(userId));
+            EnsureVarint(memberFields, 22, (ulong)updatedDatetime);
             state.Members.Add(ProtobufWire.Encode(memberFields));
         }
     }
@@ -193,6 +264,21 @@ public sealed class PartyStateMerger
     {
         fields.RemoveAll(field => field.Number == number);
         fields.Insert(0, ProtoField.Varint(number, value));
+    }
+
+    private static long GetReplayTime(IHeaderDictionary responseHeaders)
+    {
+        var value = responseHeaders["X-Server-Time"].ToString();
+        if (!long.TryParse(value, NumberStyles.None, CultureInfo.InvariantCulture, out var replayTime))
+            throw new InvalidDataException("Secure response template has no valid X-Server-Time header.");
+        return replayTime;
+    }
+
+    private static byte[] EncodeResponse(byte[] plain, IHeaderDictionary responseHeaders)
+    {
+        var compressed = Compress(plain);
+        responseHeaders["X-Content-Hash"] = ToUrlSafeBase64(SHA256.HashData(compressed));
+        return Encrypt(compressed, ServerApiKey);
     }
 
     private static byte[] Decrypt(byte[] payload, byte[] key)

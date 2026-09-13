@@ -95,11 +95,9 @@ app.Run(async context =>
             bodyBytes,
             context.RequestAborted);
 
-        // The client requested an application-layer encrypted response. An empty HTTP
-        // body (or a fabricated secure hash) is rejected before protobuf parsing, so use
-        // a captured small success response as an opaque encryption envelope. Its
-        // protobuf payload has no required fields and unknown fields are ignored by the
-        // party-upsert response type.
+        // Reuse the captured response headers as the secure-response template. The body
+        // below is regenerated with CommonResponse.User.Update so the client applies the
+        // saved party rows to its in-memory cache immediately.
         var responseTemplatePath =
             $"/api/pvt/store/purchase/restart/steam?user_id={Uri.EscapeDataString(userId)}";
         if (!store.TryGet(host, HttpMethods.Post, responseTemplatePath, out var responseTemplate))
@@ -120,11 +118,21 @@ app.Run(async context =>
             context.Response.Headers[header.Name] = header.Value;
         }
 
+        var responseBody = partyStateMerger.CreateWriteResponse(
+            request.Path.Value!, userId, bodyBytes, context.Response.Headers);
+        if (responseBody is null)
+        {
+            responseBody = responseTemplate.Body;
+            app.Logger.LogWarning(
+                "PARTY WRITE ACK could not include a client cache update; using {Template}",
+                Path.GetFileName(responseTemplate.SourceFile));
+        }
+
+        context.Response.ContentLength = responseBody.Length;
         app.Logger.LogInformation(
-            "PARTY WRITE ACK {Host}{Path} -> {Status} ({Bytes} bytes) using {Template}",
-            host, request.Path, responseTemplate.StatusCode, responseTemplate.Body.Length,
-            Path.GetFileName(responseTemplate.SourceFile));
-        await context.Response.Body.WriteAsync(responseTemplate.Body);
+            "PARTY WRITE ACK {Host}{Path} -> {Status} ({Bytes} bytes) with party cache update",
+            host, request.Path, responseTemplate.StatusCode, responseBody.Length);
+        await context.Response.Body.WriteAsync(responseBody);
         return;
     }
 

@@ -52,9 +52,13 @@ Malformed existing JSON is treated as an error rather than discarded. The storag
 location is configured by `Ff7ec:DataDirectory`.
 
 Because the client rejects an unencrypted empty response, successful writes reuse the
-captured encrypted response from `POST /api/pvt/store/purchase/restart/steam` as an
-opaque success envelope. That capture must be present for the same user ID; otherwise the
-write remains on disk but the server returns HTTP 503.
+secure headers from the captured `POST /api/pvt/store/purchase/restart/steam` response.
+The server generates a fresh encrypted protobuf body whose `CommonResponse.User.Update`
+contains the changed party rows with timestamps capped to the captured replay clock,
+allowing the party-selection screen to refresh without triggering the game's daily
+rollover check or requiring a restart. That capture must be present
+for the same user ID; otherwise the write remains on disk but the server returns HTTP
+503.
 
 ## Scope: "boot + roam"
 
