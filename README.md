@@ -59,6 +59,10 @@ clock. This refreshes party and wallpaper screens without triggering the game's 
 rollover check or requiring a restart. That capture must be present for the same user ID;
 otherwise the write remains on disk but the server returns HTTP 503.
 
+`POST /api/pvt/story/select/drama` is also acknowledged with a generated secure response.
+Its API response is empty and does not update user tables, so the selection is not added
+to the settings store; acknowledging it lets the current story dialogue continue.
+
 ## Scope: "boot + roam"
 
 This targets booting into the game and browsing already-downloaded content (menus,

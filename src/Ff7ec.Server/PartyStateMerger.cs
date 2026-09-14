@@ -8,6 +8,7 @@ public sealed class PartyStateMerger
 {
     private const int ApiRequestMultiField = 319;
     private const int ApiRequestSoloField = 321;
+    private const int ApiStorySelectDramaField = 352;
     private const int ApiRequestHomeBackgroundSettingField = 526;
     private const int ApiResponseStorePurchaseRestartField = 2001;
     private const int UserPartyMemberTable = 17062056;
@@ -55,36 +56,41 @@ public sealed class PartyStateMerger
             tables.AddRange(state.HomeBackgroundSettings.Select(bytes =>
                 ProtoField.LengthDelimited(UserHomeBackgroundSettingTable, bytes)));
 
-            // Preserve the complete captured success envelope. Some endpoint handlers expect
-            // User.delete and User.other_info to be present even when empty; synthesizing only
-            // User.update leaves the wallpaper request waiting forever in the client.
-            var templatePlain = Decompress(Decrypt(responseTemplateBody, ServerApiKey));
-            var root = ProtobufWire.Parse(templatePlain);
-            var commonIndex = root.FindIndex(field => field.Number == 101 && field.WireType == 2);
-            if (commonIndex < 0)
-                throw new InvalidDataException("Secure response template has no CommonResponse.");
-
-            var common = ProtobufWire.Parse(root[commonIndex].Value);
-            var userIndex = common.FindIndex(field => field.Number == 1 && field.WireType == 2);
-            if (userIndex < 0)
-                throw new InvalidDataException("Secure response template has no User response.");
-
-            var user = ProtobufWire.Parse(common[userIndex].Value);
-            user.RemoveAll(field => field.Number == 1);
-            user.Insert(0, ProtoField.LengthDelimited(1, ProtobufWire.Encode(tables)));
-            common[userIndex] = ProtoField.LengthDelimited(1, ProtobufWire.Encode(user));
-            root[commonIndex] = ProtoField.LengthDelimited(101, ProtobufWire.Encode(common));
-
-            var responseField = GetRequestField(endpoint);
-            root.RemoveAll(field => field.Number == ApiResponseStorePurchaseRestartField);
-            root.RemoveAll(field => field.Number == responseField);
-            root.Add(ProtoField.LengthDelimited(responseField, []));
-
-            return EncodeResponse(ProtobufWire.Encode(root), responseHeaders);
+            return CreateResponse(
+                responseTemplateBody,
+                responseHeaders,
+                GetRequestField(endpoint),
+                tables);
         }
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "Could not create settings cache update response for user {UserId}.", userId);
+            return null;
+        }
+    }
+
+    public byte[]? CreateStorySelectDramaResponse(
+        string userId,
+        byte[] requestBody,
+        byte[] responseTemplateBody,
+        IHeaderDictionary responseHeaders)
+    {
+        try
+        {
+            var request = ProtobufWire.Parse(Decompress(Decrypt(requestBody, ClientApiKey)));
+            if (!request.Any(field => field.Number == ApiStorySelectDramaField && field.WireType == 2))
+                throw new InvalidDataException(
+                    $"Story selection write has no protobuf field {ApiStorySelectDramaField}.");
+
+            return CreateResponse(
+                responseTemplateBody,
+                responseHeaders,
+                ApiStorySelectDramaField,
+                updateTables: null);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Could not create story selection response for user {UserId}.", userId);
             return null;
         }
     }
@@ -258,6 +264,7 @@ public sealed class PartyStateMerger
         CopyAs(fields, party, sourceNumber: 2, targetNumber: 3);
         CopyAs(fields, party, sourceNumber: 4, targetNumber: 4);
         CopyAs(fields, party, sourceNumber: 3, targetNumber: 6);
+        CopyNestedAs(fields, party, sourceNumber: 7, nestedSourceNumber: 1, targetNumber: 7);
         state.Parties.Add(ProtobufWire.Encode(party));
         foreach (var member in fields.Where(field => field.Number == 5 && field.WireType == 2))
         {
@@ -283,6 +290,23 @@ public sealed class PartyStateMerger
             EnsureVarint(memberFields, 1, ulong.Parse(userId));
             EnsureVarint(memberFields, 22, (ulong)updatedDatetime);
             state.Members.Add(ProtobufWire.Encode(memberFields));
+
+            var memberId = GetInt64(memberFields, 2);
+            if (memberId is null ||
+                !TryFindMessage(memberWrapper, 3, out var memoriaBytes))
+                continue;
+
+            // Multi-party member IDs append the one-based member slot to the party ID
+            // (for example, member 2041 belongs to party 204).
+            var party = new List<ProtoField>
+            {
+                ProtoField.Varint(1, ulong.Parse(userId)),
+                ProtoField.Varint(2, (ulong)(memberId.Value / 10)),
+            };
+            CopyAs(memberFields, party, sourceNumber: 20, targetNumber: 4);
+            party.Add(ProtoField.Varint(6, 1));
+            CopyAs(ProtobufWire.Parse(memoriaBytes), party, sourceNumber: 1, targetNumber: 7);
+            state.Parties.Add(ProtobufWire.Encode(party));
         }
     }
 
@@ -326,10 +350,57 @@ public sealed class PartyStateMerger
             target.Add(field with { Number = targetNumber });
     }
 
+    private static void CopyNestedAs(
+        List<ProtoField> source,
+        List<ProtoField> target,
+        int sourceNumber,
+        int nestedSourceNumber,
+        int targetNumber)
+    {
+        var wrapper = source.FirstOrDefault(value => value.Number == sourceNumber && value.WireType == 2);
+        if (wrapper is null) return;
+        CopyAs(ProtobufWire.Parse(wrapper.Value), target, nestedSourceNumber, targetNumber);
+    }
+
     private static void EnsureVarint(List<ProtoField> fields, int number, ulong value)
     {
         fields.RemoveAll(field => field.Number == number);
         fields.Insert(0, ProtoField.Varint(number, value));
+    }
+
+    private static byte[] CreateResponse(
+        byte[] responseTemplateBody,
+        IHeaderDictionary responseHeaders,
+        int responseField,
+        List<ProtoField>? updateTables)
+    {
+        // Preserve the complete captured success envelope. Some endpoint handlers expect
+        // User.delete and User.other_info to remain present even when no rows are updated.
+        var templatePlain = Decompress(Decrypt(responseTemplateBody, ServerApiKey));
+        var root = ProtobufWire.Parse(templatePlain);
+
+        if (updateTables is not null)
+        {
+            var commonIndex = root.FindIndex(field => field.Number == 101 && field.WireType == 2);
+            if (commonIndex < 0)
+                throw new InvalidDataException("Secure response template has no CommonResponse.");
+
+            var common = ProtobufWire.Parse(root[commonIndex].Value);
+            var userIndex = common.FindIndex(field => field.Number == 1 && field.WireType == 2);
+            if (userIndex < 0)
+                throw new InvalidDataException("Secure response template has no User response.");
+
+            var user = ProtobufWire.Parse(common[userIndex].Value);
+            user.RemoveAll(field => field.Number == 1);
+            user.Insert(0, ProtoField.LengthDelimited(1, ProtobufWire.Encode(updateTables)));
+            common[userIndex] = ProtoField.LengthDelimited(1, ProtobufWire.Encode(user));
+            root[commonIndex] = ProtoField.LengthDelimited(101, ProtobufWire.Encode(common));
+        }
+
+        root.RemoveAll(field => field.Number == ApiResponseStorePurchaseRestartField);
+        root.RemoveAll(field => field.Number == responseField);
+        root.Add(ProtoField.LengthDelimited(responseField, []));
+        return EncodeResponse(ProtobufWire.Encode(root), responseHeaders);
     }
 
     private static long GetReplayTime(IHeaderDictionary responseHeaders)

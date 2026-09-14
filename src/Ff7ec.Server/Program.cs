@@ -60,6 +60,7 @@ var writableSettingsEndpoints = new HashSet<string>(StringComparer.Ordinal)
     "/api/pvt/party/solo/set/upsert",
     "/api/pvt/user/home/background/setting",
 };
+const string storySelectDramaEndpoint = "/api/pvt/story/select/drama";
 
 app.Run(async context =>
 {
@@ -71,8 +72,13 @@ app.Run(async context =>
     await request.Body.CopyToAsync(bodyStream);
     var bodyBytes = bodyStream.ToArray();
 
-    if (HttpMethods.IsPost(request.Method) &&
-        writableSettingsEndpoints.Contains(request.Path.Value ?? string.Empty))
+    var requestPath = request.Path.Value ?? string.Empty;
+    var isSettingsWrite = writableSettingsEndpoints.Contains(requestPath);
+    var isStorySelectionWrite = string.Equals(
+        requestPath,
+        storySelectDramaEndpoint,
+        StringComparison.Ordinal);
+    if (HttpMethods.IsPost(request.Method) && (isSettingsWrite || isStorySelectionWrite))
     {
         var userId = request.Query["user_id"].ToString();
         var contentHash = request.Headers["x-content-hash"].ToString();
@@ -82,33 +88,35 @@ app.Run(async context =>
         {
             context.Response.StatusCode = StatusCodes.Status400BadRequest;
             await context.Response.WriteAsync(
-                "Writable settings require nonempty user_id, x-content-hash, and request body.\n");
+                "Writable requests require nonempty user_id, x-content-hash, and request body.\n");
             return;
         }
 
-        await partySettingsStore.AppendAsync(
-            host,
-            request.Path.Value!,
-            pathAndQuery,
-            userId,
-            contentHash,
-            request.ContentType,
-            bodyBytes,
-            context.RequestAborted);
+        if (isSettingsWrite)
+        {
+            await partySettingsStore.AppendAsync(
+                host,
+                requestPath,
+                pathAndQuery,
+                userId,
+                contentHash,
+                request.ContentType,
+                bodyBytes,
+                context.RequestAborted);
+        }
 
-        // Reuse the captured response headers as the secure-response template. The body
-        // below is regenerated with CommonResponse.User.Update so the client applies the
-        // saved party rows to its in-memory cache immediately.
+        // Reuse the captured response headers and CommonResponse as a secure success
+        // envelope, replacing its endpoint-specific response and optional user update.
         var responseTemplatePath =
             $"/api/pvt/store/purchase/restart/steam?user_id={Uri.EscapeDataString(userId)}";
         if (!store.TryGet(host, HttpMethods.Post, responseTemplatePath, out var responseTemplate))
         {
             app.Logger.LogError(
-                "SETTINGS WRITE persisted but response template is missing: {Method} {Host}{Path}",
+                "WRITE response template is missing: {Method} {Host}{Path}",
                 HttpMethods.Post, host, responseTemplatePath);
             context.Response.StatusCode = StatusCodes.Status503ServiceUnavailable;
             await context.Response.WriteAsync(
-                "Settings were saved, but no encrypted success-response template is available.\n");
+                "No encrypted success-response template is available.\n");
             return;
         }
 
@@ -119,20 +127,33 @@ app.Run(async context =>
             context.Response.Headers[header.Name] = header.Value;
         }
 
-        var responseBody = partyStateMerger.CreateWriteResponse(
-            request.Path.Value!, userId, bodyBytes, responseTemplate.Body, context.Response.Headers);
-        if (responseBody is null)
+        var responseBody = isSettingsWrite
+            ? partyStateMerger.CreateWriteResponse(
+                requestPath, userId, bodyBytes, responseTemplate.Body, context.Response.Headers)
+            : partyStateMerger.CreateStorySelectDramaResponse(
+                userId, bodyBytes, responseTemplate.Body, context.Response.Headers);
+        if (responseBody is null && isSettingsWrite)
         {
             responseBody = responseTemplate.Body;
             app.Logger.LogWarning(
                 "SETTINGS WRITE ACK could not include a client cache update; using {Template}",
                 Path.GetFileName(responseTemplate.SourceFile));
         }
+        else if (responseBody is null)
+        {
+            context.Response.StatusCode = StatusCodes.Status500InternalServerError;
+            await context.Response.WriteAsync("Could not generate a secure write response.\n");
+            return;
+        }
 
         context.Response.ContentLength = responseBody.Length;
         app.Logger.LogInformation(
-            "SETTINGS WRITE ACK {Host}{Path} -> {Status} ({Bytes} bytes) with client cache update",
-            host, request.Path, responseTemplate.StatusCode, responseBody.Length);
+            "WRITE ACK {Host}{Path} -> {Status} ({Bytes} bytes){Update}",
+            host,
+            request.Path,
+            responseTemplate.StatusCode,
+            responseBody.Length,
+            isSettingsWrite ? " with client cache update" : string.Empty);
         await context.Response.Body.WriteAsync(responseBody);
         return;
     }
