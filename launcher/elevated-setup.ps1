@@ -43,7 +43,9 @@ try {
     foreach ($h in $Hostnames) { $filtered.Add("127.0.0.1 $h") }
     $filtered.Add("")
     Set-Content -Path $hostsPath -Value $filtered -Encoding ASCII
+    ipconfig.exe /flushdns | Out-Null
     Log "Hosts file updated: $($Hostnames.Count) hostnames now point to 127.0.0.1."
+    Log "Windows DNS cache flushed."
 
     Log "SUCCESS"
 }

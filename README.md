@@ -17,10 +17,10 @@ once returned for the same request, captured while they were still live.
 3. **Replay**: `src/Ff7ec.Server` is a small ASP.NET Core/Kestrel app that terminates TLS
    itself (using a self-generated, self-signed CA - see `certs/`) and serves back the
    captured response, verbatim, for any request matching a captured key.
-4. **Writable party settings**: the solo and co-op party upsert requests are handled
-   before replay lookup. Their encrypted protobuf request bodies are persisted to
-   `data/party-settings.json`, then acknowledged with a captured encrypted success
-   response. Later incoming replay requests are rewritten from that local state before
+4. **Writable user settings**: solo/co-op party upserts and home-wallpaper changes are
+   handled before replay lookup. Their encrypted protobuf request bodies are persisted
+   to `data/party-settings.json`, then acknowledged with a generated encrypted cache
+   update. Later incoming replay requests are rewritten from that local state before
    their response is returned to the game.
 
 ### Why verbatim replay is enough (no decryption needed)
@@ -34,16 +34,16 @@ it's the same (body, hash) pair the client already saw once during capture. The 
 is that this server cannot generate *new* responses to reflect state changes (completing
 a quest, spending currency, etc.) - see Scope below.
 
-### Writable party-setting limits
+### Writable-setting limits
 
-`POST /api/pvt/party/multi/set/upsert` and
-`POST /api/pvt/party/solo/set/upsert` are narrow exceptions to read-only replay. The server
-stores each accepted request's exact bytes losslessly as Base64, together with its
-`x-content-hash`, host, route, user ID, and timestamp. The write is acknowledged first,
-then later full user-snapshot replay requests are decoded and rewritten from the latest
-local state; that overlay replaces matching user-party and party-member records in the
-replayed user tables. Smaller boot-time responses are left byte-for-byte unchanged. No
-other game state is changed.
+`POST /api/pvt/party/multi/set/upsert`, `POST /api/pvt/party/solo/set/upsert`, and
+`POST /api/pvt/user/home/background/setting` are narrow exceptions to read-only replay.
+The server stores each accepted request's exact bytes losslessly as Base64, together with
+its `x-content-hash`, host, route, user ID, and timestamp. The write is acknowledged with
+an immediate client-cache update, then later full user-snapshot replay requests are
+decoded and rewritten from the latest local state. The overlay replaces matching party,
+party-member, and home-background-setting records in the replayed user tables. Smaller
+boot-time responses are left byte-for-byte unchanged. No other game state is changed.
 
 Writes are serialized and the JSON file is replaced atomically after its temporary file
 has been flushed to disk. An immediate retry with the same hash and payload as the latest
@@ -54,11 +54,10 @@ location is configured by `Ff7ec:DataDirectory`.
 Because the client rejects an unencrypted empty response, successful writes reuse the
 secure headers from the captured `POST /api/pvt/store/purchase/restart/steam` response.
 The server generates a fresh encrypted protobuf body whose `CommonResponse.User.Update`
-contains the changed party rows with timestamps capped to the captured replay clock,
-allowing the party-selection screen to refresh without triggering the game's daily
-rollover check or requiring a restart. That capture must be present
-for the same user ID; otherwise the write remains on disk but the server returns HTTP
-503.
+contains the changed setting rows, with party timestamps capped to the captured replay
+clock. This refreshes party and wallpaper screens without triggering the game's daily
+rollover check or requiring a restart. That capture must be present for the same user ID;
+otherwise the write remains on disk but the server returns HTTP 503.
 
 ## Scope: "boot + roam"
 

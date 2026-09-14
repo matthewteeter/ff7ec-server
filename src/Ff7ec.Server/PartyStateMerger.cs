@@ -8,7 +8,10 @@ public sealed class PartyStateMerger
 {
     private const int ApiRequestMultiField = 319;
     private const int ApiRequestSoloField = 321;
+    private const int ApiRequestHomeBackgroundSettingField = 526;
+    private const int ApiResponseStorePurchaseRestartField = 2001;
     private const int UserPartyMemberTable = 17062056;
+    private const int UserHomeBackgroundSettingTable = 242346576;
     private const int UserPartyTable = 312005933;
 
     private static readonly byte[] ClientApiKey = Convert.FromBase64String("Gs69+UiZDGBrjzj0uGq/m6mFs66bBUAP5ykHOROesZ4=");
@@ -33,6 +36,7 @@ public sealed class PartyStateMerger
         string endpoint,
         string userId,
         byte[] requestBody,
+        byte[] responseTemplateBody,
         IHeaderDictionary responseHeaders)
     {
         try
@@ -40,27 +44,47 @@ public sealed class PartyStateMerger
             var replayTime = GetReplayTime(responseHeaders);
             var state = new SavedState();
             ReadRequest(state, endpoint, requestBody, userId, replayTime);
-            if (state.Members.Count == 0 && state.Parties.Count == 0) return null;
+            if (state.Members.Count == 0 &&
+                state.Parties.Count == 0 &&
+                state.HomeBackgroundSettings.Count == 0)
+                return null;
 
             var tables = new List<ProtoField>();
             tables.AddRange(state.Parties.Select(bytes => ProtoField.LengthDelimited(UserPartyTable, bytes)));
             tables.AddRange(state.Members.Select(bytes => ProtoField.LengthDelimited(UserPartyMemberTable, bytes)));
+            tables.AddRange(state.HomeBackgroundSettings.Select(bytes =>
+                ProtoField.LengthDelimited(UserHomeBackgroundSettingTable, bytes)));
 
-            var user = ProtobufWire.Encode([ProtoField.LengthDelimited(1, ProtobufWire.Encode(tables))]);
-            var common = ProtobufWire.Encode([ProtoField.LengthDelimited(1, user)]);
-            var responseField = endpoint.EndsWith("/multi/set/upsert", StringComparison.Ordinal)
-                ? ApiRequestMultiField : ApiRequestSoloField;
-            var root = new[]
-            {
-                ProtoField.LengthDelimited(101, common),
-                ProtoField.LengthDelimited(responseField, []),
-            };
+            // Preserve the complete captured success envelope. Some endpoint handlers expect
+            // User.delete and User.other_info to be present even when empty; synthesizing only
+            // User.update leaves the wallpaper request waiting forever in the client.
+            var templatePlain = Decompress(Decrypt(responseTemplateBody, ServerApiKey));
+            var root = ProtobufWire.Parse(templatePlain);
+            var commonIndex = root.FindIndex(field => field.Number == 101 && field.WireType == 2);
+            if (commonIndex < 0)
+                throw new InvalidDataException("Secure response template has no CommonResponse.");
+
+            var common = ProtobufWire.Parse(root[commonIndex].Value);
+            var userIndex = common.FindIndex(field => field.Number == 1 && field.WireType == 2);
+            if (userIndex < 0)
+                throw new InvalidDataException("Secure response template has no User response.");
+
+            var user = ProtobufWire.Parse(common[userIndex].Value);
+            user.RemoveAll(field => field.Number == 1);
+            user.Insert(0, ProtoField.LengthDelimited(1, ProtobufWire.Encode(tables)));
+            common[userIndex] = ProtoField.LengthDelimited(1, ProtobufWire.Encode(user));
+            root[commonIndex] = ProtoField.LengthDelimited(101, ProtobufWire.Encode(common));
+
+            var responseField = GetRequestField(endpoint);
+            root.RemoveAll(field => field.Number == ApiResponseStorePurchaseRestartField);
+            root.RemoveAll(field => field.Number == responseField);
+            root.Add(ProtoField.LengthDelimited(responseField, []));
 
             return EncodeResponse(ProtobufWire.Encode(root), responseHeaders);
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "Could not create party cache update response for user {UserId}.", userId);
+            _logger.LogWarning(ex, "Could not create settings cache update response for user {UserId}.", userId);
             return null;
         }
     }
@@ -106,15 +130,25 @@ public sealed class PartyStateMerger
             var tables = ProtobufWire.Parse(user[tablesIndex].Value);
             if (!tables.Any(field =>
                     field.WireType == 2 &&
-                    (field.Number == UserPartyTable || field.Number == UserPartyMemberTable)))
+                    (field.Number == UserPartyTable ||
+                     field.Number == UserPartyMemberTable ||
+                     field.Number == UserHomeBackgroundSettingTable)))
                 return null;
 
             var replayTime = GetReplayTime(responseHeaders);
             var saved = ReadSavedState(records, userId, replayTime);
-            if (saved.Members.Count == 0 && saved.Parties.Count == 0) return null;
+            if (saved.Members.Count == 0 &&
+                saved.Parties.Count == 0 &&
+                saved.HomeBackgroundSettings.Count == 0)
+                return null;
 
             tables = MergeTable(tables, UserPartyTable, saved.Parties, keyField: 2);
             tables = MergeTable(tables, UserPartyMemberTable, saved.Members, keyField: 2);
+            tables = MergeTable(
+                tables,
+                UserHomeBackgroundSettingTable,
+                saved.HomeBackgroundSettings,
+                keyField: 1);
             user[tablesIndex] = ProtoField.LengthDelimited(1, ProtobufWire.Encode(tables));
             common[common.FindIndex(field => field.Number == 1 && field.WireType == 2)] =
                 ProtoField.LengthDelimited(1, ProtobufWire.Encode(user));
@@ -164,16 +198,48 @@ public sealed class PartyStateMerger
     {
         var compressed = Decrypt(body, ClientApiKey);
         var request = ProtobufWire.Parse(Decompress(compressed));
-        var fieldNumber = endpoint.EndsWith("/multi/set/upsert", StringComparison.Ordinal)
-            ? ApiRequestMultiField : ApiRequestSoloField;
+        var fieldNumber = GetRequestField(endpoint);
         var requestField = request.FirstOrDefault(field => field.Number == fieldNumber && field.WireType == 2);
         if (requestField is null)
-            throw new InvalidDataException($"Party write has no protobuf field {fieldNumber}.");
+            throw new InvalidDataException($"Settings write has no protobuf field {fieldNumber}.");
 
-        if (fieldNumber == ApiRequestSoloField)
-            ReadSolo(state, ProtobufWire.Parse(requestField.Value), userId, updatedDatetime);
-        else
-            ReadMulti(state, ProtobufWire.Parse(requestField.Value), userId, updatedDatetime);
+        var fields = ProtobufWire.Parse(requestField.Value);
+        switch (fieldNumber)
+        {
+            case ApiRequestSoloField:
+                ReadSolo(state, fields, userId, updatedDatetime);
+                break;
+            case ApiRequestMultiField:
+                ReadMulti(state, fields, userId, updatedDatetime);
+                break;
+            case ApiRequestHomeBackgroundSettingField:
+                ReadHomeBackgroundSetting(state, fields, userId);
+                break;
+        }
+    }
+
+    private static int GetRequestField(string endpoint) => endpoint switch
+    {
+        "/api/pvt/party/multi/set/upsert" => ApiRequestMultiField,
+        "/api/pvt/party/solo/set/upsert" => ApiRequestSoloField,
+        "/api/pvt/user/home/background/setting" => ApiRequestHomeBackgroundSettingField,
+        _ => throw new InvalidDataException($"Unsupported writable settings endpoint '{endpoint}'."),
+    };
+
+    private static void ReadHomeBackgroundSetting(
+        SavedState state,
+        List<ProtoField> fields,
+        string userId)
+    {
+        var setting = new List<ProtoField>
+        {
+            ProtoField.Varint(1, ulong.Parse(userId)),
+        };
+
+        for (var sourceNumber = 1; sourceNumber <= 5; sourceNumber++)
+            CopyAs(fields, setting, sourceNumber, sourceNumber + 1);
+
+        state.HomeBackgroundSettings.Add(ProtobufWire.Encode(setting));
     }
 
     private static void ReadSolo(
@@ -333,5 +399,6 @@ public sealed class PartyStateMerger
     {
         public List<byte[]> Parties { get; } = [];
         public List<byte[]> Members { get; } = [];
+        public List<byte[]> HomeBackgroundSettings { get; } = [];
     }
 }

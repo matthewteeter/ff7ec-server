@@ -4,7 +4,7 @@ using System.Text.Json.Serialization;
 namespace Ff7ec.Server;
 
 /// <summary>
-/// Durably records opaque party-setting writes without attempting to decrypt or
+/// Durably records supported opaque settings writes without attempting to decrypt or
 /// interpret their protobuf payloads.
 /// </summary>
 public sealed class PartySettingsStore
@@ -56,7 +56,7 @@ public sealed class PartySettingsStore
                 string.Equals(latest.BodyBase64, bodyBase64, StringComparison.Ordinal))
             {
                 _logger.LogInformation(
-                    "PARTY WRITE duplicate acknowledged without append: {Host}{Endpoint} user {UserId}",
+                    "SETTINGS WRITE duplicate acknowledged without append: {Host}{Endpoint} user {UserId}",
                     host, endpoint, userId);
                 return false;
             }
@@ -84,7 +84,7 @@ public sealed class PartySettingsStore
             _document = updatedDocument;
 
             _logger.LogInformation(
-                "PARTY WRITE persisted: {Host}{Endpoint} user {UserId} ({Bytes} bytes)",
+                "SETTINGS WRITE persisted: {Host}{Endpoint} user {UserId} ({Bytes} bytes)",
                 host, endpoint, userId, body.Length);
             return true;
         }
@@ -113,7 +113,7 @@ public sealed class PartySettingsStore
                 throw new InvalidDataException($"Party settings store '{_storePath}' has no records array.");
 
             _logger.LogInformation(
-                "Loaded {Count} persisted party-setting writes from {Path}",
+                "Loaded {Count} persisted settings writes from {Path}",
                 document.Records.Count, _storePath);
             return document;
         }

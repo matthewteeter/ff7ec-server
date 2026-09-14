@@ -24,7 +24,9 @@ try {
         if (-not $skipping) { $filtered.Add($line) }
     }
     Set-Content -Path $hostsPath -Value $filtered -Encoding ASCII
+    ipconfig.exe /flushdns | Out-Null
     Log "Hosts file FF7EC redirect block removed."
+    Log "Windows DNS cache flushed."
     Log "SUCCESS"
 }
 catch {

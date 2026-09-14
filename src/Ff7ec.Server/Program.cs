@@ -54,10 +54,11 @@ var suppressedHeaders = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
     "Via", "X-Cache", "X-Amz-Cf-Pop", "X-Amz-Cf-Id", "Date",
 };
 
-var writablePartyEndpoints = new HashSet<string>(StringComparer.Ordinal)
+var writableSettingsEndpoints = new HashSet<string>(StringComparer.Ordinal)
 {
     "/api/pvt/party/multi/set/upsert",
     "/api/pvt/party/solo/set/upsert",
+    "/api/pvt/user/home/background/setting",
 };
 
 app.Run(async context =>
@@ -71,7 +72,7 @@ app.Run(async context =>
     var bodyBytes = bodyStream.ToArray();
 
     if (HttpMethods.IsPost(request.Method) &&
-        writablePartyEndpoints.Contains(request.Path.Value ?? string.Empty))
+        writableSettingsEndpoints.Contains(request.Path.Value ?? string.Empty))
     {
         var userId = request.Query["user_id"].ToString();
         var contentHash = request.Headers["x-content-hash"].ToString();
@@ -81,7 +82,7 @@ app.Run(async context =>
         {
             context.Response.StatusCode = StatusCodes.Status400BadRequest;
             await context.Response.WriteAsync(
-                "Party-setting writes require nonempty user_id, x-content-hash, and request body.\n");
+                "Writable settings require nonempty user_id, x-content-hash, and request body.\n");
             return;
         }
 
@@ -103,11 +104,11 @@ app.Run(async context =>
         if (!store.TryGet(host, HttpMethods.Post, responseTemplatePath, out var responseTemplate))
         {
             app.Logger.LogError(
-                "PARTY WRITE persisted but response template is missing: {Method} {Host}{Path}",
+                "SETTINGS WRITE persisted but response template is missing: {Method} {Host}{Path}",
                 HttpMethods.Post, host, responseTemplatePath);
             context.Response.StatusCode = StatusCodes.Status503ServiceUnavailable;
             await context.Response.WriteAsync(
-                "Party settings were saved, but no encrypted success-response template is available.\n");
+                "Settings were saved, but no encrypted success-response template is available.\n");
             return;
         }
 
@@ -119,18 +120,18 @@ app.Run(async context =>
         }
 
         var responseBody = partyStateMerger.CreateWriteResponse(
-            request.Path.Value!, userId, bodyBytes, context.Response.Headers);
+            request.Path.Value!, userId, bodyBytes, responseTemplate.Body, context.Response.Headers);
         if (responseBody is null)
         {
             responseBody = responseTemplate.Body;
             app.Logger.LogWarning(
-                "PARTY WRITE ACK could not include a client cache update; using {Template}",
+                "SETTINGS WRITE ACK could not include a client cache update; using {Template}",
                 Path.GetFileName(responseTemplate.SourceFile));
         }
 
         context.Response.ContentLength = responseBody.Length;
         app.Logger.LogInformation(
-            "PARTY WRITE ACK {Host}{Path} -> {Status} ({Bytes} bytes) with party cache update",
+            "SETTINGS WRITE ACK {Host}{Path} -> {Status} ({Bytes} bytes) with client cache update",
             host, request.Path, responseTemplate.StatusCode, responseBody.Length);
         await context.Response.Body.WriteAsync(responseBody);
         return;
