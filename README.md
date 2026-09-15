@@ -59,9 +59,10 @@ clock. This refreshes party and wallpaper screens without triggering the game's 
 rollover check or requiring a restart. That capture must be present for the same user ID;
 otherwise the write remains on disk but the server returns HTTP 503.
 
-`POST /api/pvt/story/select/drama` is also acknowledged with a generated secure response.
-Its API response is empty and does not update user tables, so the selection is not added
-to the settings store; acknowledging it lets the current story dialogue continue.
+`POST /api/pvt/story/select/drama` and `POST /api/pvt/story/result` are also
+acknowledged with generated secure responses. Their endpoint responses can be empty and
+do not update user tables here, so they are not added to the settings store. This lets
+replayed story dialogue and already-completed episodes continue without a captured write.
 
 ## Scope: "boot + roam"
 

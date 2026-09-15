@@ -8,6 +8,7 @@ public sealed class PartyStateMerger
 {
     private const int ApiRequestMultiField = 319;
     private const int ApiRequestSoloField = 321;
+    private const int ApiStoryResultField = 323;
     private const int ApiStorySelectDramaField = 352;
     private const int ApiRequestHomeBackgroundSettingField = 526;
     private const int ApiResponseStorePurchaseRestartField = 2001;
@@ -69,7 +70,8 @@ public sealed class PartyStateMerger
         }
     }
 
-    public byte[]? CreateStorySelectDramaResponse(
+    public byte[]? CreateEmptyWriteResponse(
+        string endpoint,
         string userId,
         byte[] requestBody,
         byte[] responseTemplateBody,
@@ -77,20 +79,25 @@ public sealed class PartyStateMerger
     {
         try
         {
+            var responseField = GetEmptyWriteField(endpoint);
             var request = ProtobufWire.Parse(Decompress(Decrypt(requestBody, ClientApiKey)));
-            if (!request.Any(field => field.Number == ApiStorySelectDramaField && field.WireType == 2))
+            if (!request.Any(field => field.Number == responseField && field.WireType == 2))
                 throw new InvalidDataException(
-                    $"Story selection write has no protobuf field {ApiStorySelectDramaField}.");
+                    $"Write to {endpoint} has no protobuf field {responseField}.");
 
             return CreateResponse(
                 responseTemplateBody,
                 responseHeaders,
-                ApiStorySelectDramaField,
+                responseField,
                 updateTables: null);
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "Could not create story selection response for user {UserId}.", userId);
+            _logger.LogWarning(
+                ex,
+                "Could not create empty write response for {Endpoint}, user {UserId}.",
+                endpoint,
+                userId);
             return null;
         }
     }
@@ -230,6 +237,13 @@ public sealed class PartyStateMerger
         "/api/pvt/party/solo/set/upsert" => ApiRequestSoloField,
         "/api/pvt/user/home/background/setting" => ApiRequestHomeBackgroundSettingField,
         _ => throw new InvalidDataException($"Unsupported writable settings endpoint '{endpoint}'."),
+    };
+
+    private static int GetEmptyWriteField(string endpoint) => endpoint switch
+    {
+        "/api/pvt/story/result" => ApiStoryResultField,
+        "/api/pvt/story/select/drama" => ApiStorySelectDramaField,
+        _ => throw new InvalidDataException($"Unsupported empty-response write endpoint '{endpoint}'."),
     };
 
     private static void ReadHomeBackgroundSetting(

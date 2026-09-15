@@ -60,7 +60,11 @@ var writableSettingsEndpoints = new HashSet<string>(StringComparer.Ordinal)
     "/api/pvt/party/solo/set/upsert",
     "/api/pvt/user/home/background/setting",
 };
-const string storySelectDramaEndpoint = "/api/pvt/story/select/drama";
+var emptyWriteEndpoints = new HashSet<string>(StringComparer.Ordinal)
+{
+    "/api/pvt/story/result",
+    "/api/pvt/story/select/drama",
+};
 
 app.Run(async context =>
 {
@@ -74,11 +78,8 @@ app.Run(async context =>
 
     var requestPath = request.Path.Value ?? string.Empty;
     var isSettingsWrite = writableSettingsEndpoints.Contains(requestPath);
-    var isStorySelectionWrite = string.Equals(
-        requestPath,
-        storySelectDramaEndpoint,
-        StringComparison.Ordinal);
-    if (HttpMethods.IsPost(request.Method) && (isSettingsWrite || isStorySelectionWrite))
+    var isEmptyWrite = emptyWriteEndpoints.Contains(requestPath);
+    if (HttpMethods.IsPost(request.Method) && (isSettingsWrite || isEmptyWrite))
     {
         var userId = request.Query["user_id"].ToString();
         var contentHash = request.Headers["x-content-hash"].ToString();
@@ -130,8 +131,8 @@ app.Run(async context =>
         var responseBody = isSettingsWrite
             ? partyStateMerger.CreateWriteResponse(
                 requestPath, userId, bodyBytes, responseTemplate.Body, context.Response.Headers)
-            : partyStateMerger.CreateStorySelectDramaResponse(
-                userId, bodyBytes, responseTemplate.Body, context.Response.Headers);
+            : partyStateMerger.CreateEmptyWriteResponse(
+                requestPath, userId, bodyBytes, responseTemplate.Body, context.Response.Headers);
         if (responseBody is null && isSettingsWrite)
         {
             responseBody = responseTemplate.Body;
