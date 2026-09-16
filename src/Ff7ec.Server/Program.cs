@@ -69,6 +69,7 @@ var emptyWriteEndpoints = new HashSet<string>(StringComparer.Ordinal)
     "/api/pvt/dungeon/story/start",
     "/api/pvt/event/solo/battle/end",
     "/api/pvt/event/solo/battle/start",
+    "/api/pvt/character/story/result",
     "/api/pvt/story/battle/end",
     "/api/pvt/story/battle/start",
     "/api/pvt/story/result",
