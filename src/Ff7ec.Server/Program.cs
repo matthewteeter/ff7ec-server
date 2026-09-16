@@ -31,8 +31,10 @@ builder.WebHost.ConfigureKestrel(options =>
 builder.Services.AddSingleton(sp => new ReplayStore(sp.GetRequiredService<ILogger<ReplayStore>>(), capturesDir));
 builder.Services.AddSingleton(sp => new GapLogger(sp.GetRequiredService<ILogger<GapLogger>>(), gapsDir));
 builder.Services.AddSingleton(sp => new PartySettingsStore(sp.GetRequiredService<ILogger<PartySettingsStore>>(), dataDir));
+builder.Services.AddSingleton(sp => new StoryStateStore(sp.GetRequiredService<ILogger<StoryStateStore>>(), dataDir));
 builder.Services.AddSingleton(sp => new PartyStateMerger(
     sp.GetRequiredService<PartySettingsStore>(),
+    sp.GetRequiredService<StoryStateStore>(),
     sp.GetRequiredService<ILogger<PartyStateMerger>>()));
 
 var app = builder.Build();
@@ -41,6 +43,7 @@ var app = builder.Build();
 // captured-response count show up immediately in the console.
 var store = app.Services.GetRequiredService<ReplayStore>();
 var partySettingsStore = app.Services.GetRequiredService<PartySettingsStore>();
+var storyStateStore = app.Services.GetRequiredService<StoryStateStore>();
 var partyStateMerger = app.Services.GetRequiredService<PartyStateMerger>();
 app.Logger.LogInformation("FF7EC offline server ready - {Count} captured responses loaded, listening on :{Port} for {Hosts}",
     store.Count, listenPort, string.Join(", ", hostNames));
@@ -62,8 +65,19 @@ var writableSettingsEndpoints = new HashSet<string>(StringComparer.Ordinal)
 };
 var emptyWriteEndpoints = new HashSet<string>(StringComparer.Ordinal)
 {
+    "/api/pvt/dungeon/story/end",
+    "/api/pvt/dungeon/story/start",
+    "/api/pvt/event/solo/battle/end",
+    "/api/pvt/event/solo/battle/start",
+    "/api/pvt/story/battle/end",
+    "/api/pvt/story/battle/start",
     "/api/pvt/story/result",
     "/api/pvt/story/select/drama",
+};
+var storyStateEndpoints = new HashSet<string>(StringComparer.Ordinal)
+{
+    "/api/pvt/story/select/drama",
+    "/api/pvt/story/result",
 };
 
 app.Run(async context =>
@@ -102,6 +116,18 @@ app.Run(async context =>
                 userId,
                 contentHash,
                 request.ContentType,
+                bodyBytes,
+                context.RequestAborted);
+        }
+
+        if (storyStateEndpoints.Contains(requestPath))
+        {
+            await storyStateStore.AppendAsync(
+                host,
+                requestPath,
+                pathAndQuery,
+                userId,
+                contentHash,
                 bodyBytes,
                 context.RequestAborted);
         }

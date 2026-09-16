@@ -9,10 +9,17 @@ public sealed class PartyStateMerger
     private const int ApiRequestMultiField = 319;
     private const int ApiRequestSoloField = 321;
     private const int ApiStoryResultField = 323;
+    private const int ApiDungeonStoryEndField = 330;
+    private const int ApiDungeonStoryStartField = 329;
+    private const int ApiStoryBattleStartField = 335;
+    private const int ApiStoryBattleEndField = 336;
     private const int ApiStorySelectDramaField = 352;
+    private const int ApiEventSoloBattleStartField = 469;
+    private const int ApiEventSoloBattleEndField = 470;
     private const int ApiRequestHomeBackgroundSettingField = 526;
     private const int ApiResponseStorePurchaseRestartField = 2001;
     private const int UserPartyMemberTable = 17062056;
+    private const int UserStoryDramaSelectionTable = 78231314;
     private const int UserHomeBackgroundSettingTable = 242346576;
     private const int UserPartyTable = 312005933;
 
@@ -20,11 +27,16 @@ public sealed class PartyStateMerger
     private static readonly byte[] ServerApiKey = Convert.FromBase64String("CMMnsenXvr7izAFborJvCZHwFrG40sykNgUSqgJ99+A=");
 
     private readonly PartySettingsStore _store;
+    private readonly StoryStateStore _storyStore;
     private readonly ILogger<PartyStateMerger> _logger;
 
-    public PartyStateMerger(PartySettingsStore store, ILogger<PartyStateMerger> logger)
+    public PartyStateMerger(
+        PartySettingsStore store,
+        StoryStateStore storyStore,
+        ILogger<PartyStateMerger> logger)
     {
         _store = store;
+        _storyStore = storyStore;
         _logger = logger;
     }
 
@@ -61,6 +73,7 @@ public sealed class PartyStateMerger
                 responseTemplateBody,
                 responseHeaders,
                 GetRequestField(endpoint),
+                responseValue: [],
                 tables);
         }
         catch (Exception ex)
@@ -81,15 +94,33 @@ public sealed class PartyStateMerger
         {
             var responseField = GetEmptyWriteField(endpoint);
             var request = ProtobufWire.Parse(Decompress(Decrypt(requestBody, ClientApiKey)));
-            if (!request.Any(field => field.Number == responseField && field.WireType == 2))
+            var requestField = request.FirstOrDefault(
+                field => field.Number == responseField && field.WireType == 2);
+            if (requestField is null)
                 throw new InvalidDataException(
                     $"Write to {endpoint} has no protobuf field {responseField}.");
+
+            List<ProtoField>? updateTables = null;
+            if (endpoint == "/api/pvt/story/select/drama")
+            {
+                var selection = ProtobufWire.Parse(requestField.Value);
+                var selectionId = GetInt64(selection, 1)
+                    ?? throw new InvalidDataException("Drama selection has no selection ID.");
+                var selectionIndex = GetInt64(selection, 2) ?? 0;
+                var row = ProtobufWire.Encode([
+                    ProtoField.Varint(1, ulong.Parse(userId)),
+                    ProtoField.Varint(2, (ulong)selectionId),
+                    ProtoField.Varint(3, (ulong)selectionIndex),
+                ]);
+                updateTables = [ProtoField.LengthDelimited(UserStoryDramaSelectionTable, row)];
+            }
 
             return CreateResponse(
                 responseTemplateBody,
                 responseHeaders,
                 responseField,
-                updateTables: null);
+                GetWriteResponseValue(endpoint, requestField.Value),
+                updateTables);
         }
         catch (Exception ex)
         {
@@ -103,9 +134,8 @@ public sealed class PartyStateMerger
     }
 
     /// <summary>
-    /// Applies the local party overlay only to replay responses that contain the
-    /// account's existing party tables. Other boot-time responses use the same API
-    /// envelope but do not carry the full user snapshot and must remain unchanged.
+    /// Applies persisted party, wallpaper, and story-choice overlays to replay responses
+    /// that contain the corresponding user tables. Other responses remain unchanged.
     /// </summary>
     public byte[]? MergeReplayResponse(
         HttpRequest request,
@@ -126,7 +156,8 @@ public sealed class PartyStateMerger
         try
         {
             var records = _store.GetRecords(host, userId);
-            if (records.Count == 0) return null;
+            var storySelections = _storyStore.GetSelections(host, userId);
+            if (records.Count == 0 && storySelections.Count == 0) return null;
 
             var compressed = Decrypt(capturedBody, ServerApiKey);
             var plain = Decompress(compressed);
@@ -145,14 +176,25 @@ public sealed class PartyStateMerger
                     field.WireType == 2 &&
                     (field.Number == UserPartyTable ||
                      field.Number == UserPartyMemberTable ||
-                     field.Number == UserHomeBackgroundSettingTable)))
+                     field.Number == UserHomeBackgroundSettingTable ||
+                     field.Number == UserStoryDramaSelectionTable)))
                 return null;
 
             var replayTime = GetReplayTime(responseHeaders);
             var saved = ReadSavedState(records, userId, replayTime);
+            foreach (var selection in storySelections)
+            {
+                saved.StoryDramaSelections.Add(ProtobufWire.Encode([
+                    ProtoField.Varint(1, ulong.Parse(userId)),
+                    ProtoField.Varint(2, (ulong)selection.SelectionId!.Value),
+                    ProtoField.Varint(3, (ulong)selection.SelectionIndex!.Value),
+                ]));
+            }
+
             if (saved.Members.Count == 0 &&
                 saved.Parties.Count == 0 &&
-                saved.HomeBackgroundSettings.Count == 0)
+                saved.HomeBackgroundSettings.Count == 0 &&
+                saved.StoryDramaSelections.Count == 0)
                 return null;
 
             tables = MergeTable(tables, UserPartyTable, saved.Parties, keyField: 2);
@@ -162,6 +204,11 @@ public sealed class PartyStateMerger
                 UserHomeBackgroundSettingTable,
                 saved.HomeBackgroundSettings,
                 keyField: 1);
+            tables = MergeTable(
+                tables,
+                UserStoryDramaSelectionTable,
+                saved.StoryDramaSelections,
+                keyField: 2);
             user[tablesIndex] = ProtoField.LengthDelimited(1, ProtobufWire.Encode(tables));
             common[common.FindIndex(field => field.Number == 1 && field.WireType == 2)] =
                 ProtoField.LengthDelimited(1, ProtobufWire.Encode(user));
@@ -241,10 +288,55 @@ public sealed class PartyStateMerger
 
     private static int GetEmptyWriteField(string endpoint) => endpoint switch
     {
+        "/api/pvt/dungeon/story/end" => ApiDungeonStoryEndField,
+        "/api/pvt/dungeon/story/start" => ApiDungeonStoryStartField,
+        "/api/pvt/event/solo/battle/end" => ApiEventSoloBattleEndField,
+        "/api/pvt/event/solo/battle/start" => ApiEventSoloBattleStartField,
+        "/api/pvt/story/battle/end" => ApiStoryBattleEndField,
+        "/api/pvt/story/battle/start" => ApiStoryBattleStartField,
         "/api/pvt/story/result" => ApiStoryResultField,
         "/api/pvt/story/select/drama" => ApiStorySelectDramaField,
         _ => throw new InvalidDataException($"Unsupported empty-response write endpoint '{endpoint}'."),
     };
+
+    private static byte[] GetWriteResponseValue(string endpoint, byte[] requestValue) => endpoint switch
+    {
+        // The client constructs its result model from BattleResult. Omitting this
+        // nested message leaves the post-battle result screen waiting indefinitely.
+        "/api/pvt/story/battle/end" => ProtobufWire.Encode([
+            ProtoField.LengthDelimited(1, []),
+        ]),
+        "/api/pvt/event/solo/battle/end" => CreateEventSoloBattleEndResponse(requestValue),
+        _ => [],
+    };
+
+    private static byte[] CreateEventSoloBattleEndResponse(byte[] requestValue)
+    {
+        var request = ProtobufWire.Parse(requestValue);
+        var resultType = GetInt64(request, 3) ?? 0;
+        var rank = resultType == 1 ? 7UL : 1UL;
+        var scoreResult = ProtobufWire.Encode([
+            ProtoField.Varint(8, rank),
+            ProtoField.Varint(9, rank),
+            ProtoField.Varint(10, rank),
+            ProtoField.Varint(11, rank),
+            ProtoField.Varint(12, rank),
+        ]);
+
+        var response = new List<ProtoField>
+        {
+            ProtoField.LengthDelimited(1, []),
+            ProtoField.LengthDelimited(2, scoreResult),
+        };
+
+        // The result flow reads the server's BattleInput rather than retaining the
+        // submitted instance. Echo it so both win and loss paths can finish loading.
+        var battleInput = request.FirstOrDefault(field => field.Number == 4 && field.WireType == 2);
+        if (battleInput is not null)
+            response.Add(ProtoField.LengthDelimited(12, battleInput.Value));
+
+        return ProtobufWire.Encode(response);
+    }
 
     private static void ReadHomeBackgroundSetting(
         SavedState state,
@@ -386,6 +478,7 @@ public sealed class PartyStateMerger
         byte[] responseTemplateBody,
         IHeaderDictionary responseHeaders,
         int responseField,
+        byte[] responseValue,
         List<ProtoField>? updateTables)
     {
         // Preserve the complete captured success envelope. Some endpoint handlers expect
@@ -413,7 +506,7 @@ public sealed class PartyStateMerger
 
         root.RemoveAll(field => field.Number == ApiResponseStorePurchaseRestartField);
         root.RemoveAll(field => field.Number == responseField);
-        root.Add(ProtoField.LengthDelimited(responseField, []));
+        root.Add(ProtoField.LengthDelimited(responseField, responseValue));
         return EncodeResponse(ProtobufWire.Encode(root), responseHeaders);
     }
 
@@ -485,5 +578,6 @@ public sealed class PartyStateMerger
         public List<byte[]> Parties { get; } = [];
         public List<byte[]> Members { get; } = [];
         public List<byte[]> HomeBackgroundSettings { get; } = [];
+        public List<byte[]> StoryDramaSelections { get; } = [];
     }
 }

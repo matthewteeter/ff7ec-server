@@ -23,6 +23,11 @@ once returned for the same request, captured while they were still live.
    update. Later incoming replay requests are rewritten from that local state before
    their response is returned to the game.
 
+   Story-mode drama selections and milestone results are also persisted to
+   `data/story-state.json`. Drama writes immediately update the client's story-selection
+   table, and later account snapshots are overlaid with each selection's latest choice.
+   This prevents chapter 7/8 branches from reverting to the choices in the old capture.
+
 ### Why verbatim replay is enough (no decryption needed)
 
 The real API wraps request/response bodies in an application-layer encryption scheme on
@@ -59,10 +64,14 @@ clock. This refreshes party and wallpaper screens without triggering the game's 
 rollover check or requiring a restart. That capture must be present for the same user ID;
 otherwise the write remains on disk but the server returns HTTP 503.
 
-`POST /api/pvt/story/select/drama` and `POST /api/pvt/story/result` are also
-acknowledged with generated secure responses. Their endpoint responses can be empty and
-do not update user tables here, so they are not added to the settings store. This lets
-replayed story dialogue and already-completed episodes continue without a captured write.
+`POST /api/pvt/dungeon/story/start`, `POST /api/pvt/dungeon/story/end`,
+`POST /api/pvt/story/battle/start`, `POST /api/pvt/story/battle/end`,
+`POST /api/pvt/event/solo/battle/start`, `POST /api/pvt/event/solo/battle/end`,
+`POST /api/pvt/story/select/drama`, and `POST /api/pvt/story/result` are also
+acknowledged with generated secure responses. They return only the minimal endpoint
+payload required by the client and do not update user tables here, so they are not
+added to the settings store. This lets replayed story dungeons, battles, dialogue,
+and already-completed episodes continue without a captured write.
 
 ## Scope: "boot + roam"
 
