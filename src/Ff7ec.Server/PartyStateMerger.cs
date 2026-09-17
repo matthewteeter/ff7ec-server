@@ -16,6 +16,7 @@ public sealed class PartyStateMerger
     private const int ApiStorySelectDramaField = 352;
     private const int ApiEventSoloBattleStartField = 469;
     private const int ApiEventSoloBattleEndField = 470;
+    private const int ApiCharacterStoryResultField = 543;
     private const int ApiRequestHomeBackgroundSettingField = 526;
     private const int ApiResponseStorePurchaseRestartField = 2001;
     private const int UserPartyMemberTable = 17062056;
@@ -292,6 +293,7 @@ public sealed class PartyStateMerger
         "/api/pvt/dungeon/story/start" => ApiDungeonStoryStartField,
         "/api/pvt/event/solo/battle/end" => ApiEventSoloBattleEndField,
         "/api/pvt/event/solo/battle/start" => ApiEventSoloBattleStartField,
+        "/api/pvt/character/story/result" => ApiCharacterStoryResultField,
         "/api/pvt/story/battle/end" => ApiStoryBattleEndField,
         "/api/pvt/story/battle/start" => ApiStoryBattleStartField,
         "/api/pvt/story/result" => ApiStoryResultField,

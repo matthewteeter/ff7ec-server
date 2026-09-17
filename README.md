@@ -67,11 +67,12 @@ otherwise the write remains on disk but the server returns HTTP 503.
 `POST /api/pvt/dungeon/story/start`, `POST /api/pvt/dungeon/story/end`,
 `POST /api/pvt/story/battle/start`, `POST /api/pvt/story/battle/end`,
 `POST /api/pvt/event/solo/battle/start`, `POST /api/pvt/event/solo/battle/end`,
-`POST /api/pvt/story/select/drama`, and `POST /api/pvt/story/result` are also
-acknowledged with generated secure responses. They return only the minimal endpoint
-payload required by the client and do not update user tables here, so they are not
-added to the settings store. This lets replayed story dungeons, battles, dialogue,
-and already-completed episodes continue without a captured write.
+`POST /api/pvt/story/select/drama`, `POST /api/pvt/story/result`, and
+`POST /api/pvt/character/story/result` are also acknowledged with generated secure
+responses. They return only the minimal endpoint payload required by the client and do
+not update user tables here, so they are not added to the settings store. This lets
+replayed story dungeons, battles, dialogue, and already-completed episodes continue
+without a captured write.
 
 ## Scope: "boot + roam"
 
