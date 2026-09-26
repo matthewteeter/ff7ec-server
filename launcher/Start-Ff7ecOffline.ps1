@@ -6,9 +6,13 @@
 
 .PARAMETER LaunchGame
     Also start FF7EC through Steam once offline mode is active.
+
+.PARAMETER SkipAssetOverrides
+    Start offline mode without applying the configured local asset override.
 #>
 param(
-    [switch]$LaunchGame
+    [switch]$LaunchGame,
+    [switch]$SkipAssetOverrides
 )
 
 $ErrorActionPreference = "Stop"
@@ -20,6 +24,22 @@ $hostnames = $appsettings.Ff7ec.Hostnames
 $caCerPath = Join-Path $certDir "ff7ec-offline-ca.cer"
 
 Write-Host "=== FF7EC Offline Server launcher ===" -ForegroundColor Cyan
+
+$overrideManager = Join-Path $PSScriptRoot "Set-Ff7ecAssetOverride.ps1"
+$restoreOverrideOnFailure = $false
+try {
+    if (-not $SkipAssetOverrides) {
+        $status = & $overrideManager Status
+        $wasAlreadyApplied = @($status)[0] -like "APPLIED:*"
+        $status | ForEach-Object { Write-Host "  $_" }
+        if ($wasAlreadyApplied) {
+            Write-Host "Configured local asset override is already applied; skipping."
+        } else {
+            Write-Host "Applying configured local asset override..."
+            & $overrideManager Apply
+            $restoreOverrideOnFailure = $true
+        }
+    }
 
 # 1. Start the replay server in its own visible window (so REPLAY/GAP log lines are
 #    visible while you play), which also generates the CA/leaf certs on first run.
@@ -92,4 +112,12 @@ Write-Host "Run Stop-Ff7ecOffline.ps1 when you're done to remove the hosts redir
 if ($LaunchGame) {
     Write-Host "Launching FF7 Ever Crisis via Steam..."
     Start-Process "steam://rungameid/2484110"
+}
+}
+catch {
+    if ($restoreOverrideOnFailure) {
+        Write-Warning "Offline startup failed; restoring the asset override applied by this launch."
+        try { & $overrideManager Restore } catch { Write-Warning "Automatic asset restoration also failed: $_" }
+    }
+    throw
 }

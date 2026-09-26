@@ -2,5 +2,8 @@
   <Folder Name="/src/">
     <Project Path="src/Ff7ec.Server/Ff7ec.Server.csproj" />
   </Folder>
+  <Folder Name="/tools/">
+    <Project Path="tools/Ff7ec.AssetOverride/Ff7ec.AssetOverride.csproj" />
+  </Folder>
   <Project Path="../FF7EC-CostumeViewer/src/Ff7ec.Octo/Ff7ec.Octo.csproj" />
 </Solution>

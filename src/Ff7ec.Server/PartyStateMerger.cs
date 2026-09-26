@@ -16,6 +16,8 @@ public sealed class PartyStateMerger
     private const int ApiStorySelectDramaField = 352;
     private const int ApiEventSoloBattleStartField = 469;
     private const int ApiEventSoloBattleEndField = 470;
+    private const int ApiCharacterStoryBattleStartField = 541;
+    private const int ApiCharacterStoryBattleEndField = 542;
     private const int ApiCharacterStoryResultField = 543;
     private const int ApiRequestHomeBackgroundSettingField = 526;
     private const int ApiResponseStorePurchaseRestartField = 2001;
@@ -93,8 +95,8 @@ public sealed class PartyStateMerger
     {
         try
         {
-            var responseField = GetEmptyWriteField(endpoint);
             var request = ProtobufWire.Parse(Decompress(Decrypt(requestBody, ClientApiKey)));
+            var responseField = GetEmptyWriteField(endpoint);
             var requestField = request.FirstOrDefault(
                 field => field.Number == responseField && field.WireType == 2);
             if (requestField is null)
@@ -293,6 +295,8 @@ public sealed class PartyStateMerger
         "/api/pvt/dungeon/story/start" => ApiDungeonStoryStartField,
         "/api/pvt/event/solo/battle/end" => ApiEventSoloBattleEndField,
         "/api/pvt/event/solo/battle/start" => ApiEventSoloBattleStartField,
+        "/api/pvt/character/story/battle/end" => ApiCharacterStoryBattleEndField,
+        "/api/pvt/character/story/battle/start" => ApiCharacterStoryBattleStartField,
         "/api/pvt/character/story/result" => ApiCharacterStoryResultField,
         "/api/pvt/story/battle/end" => ApiStoryBattleEndField,
         "/api/pvt/story/battle/start" => ApiStoryBattleStartField,
@@ -305,6 +309,9 @@ public sealed class PartyStateMerger
     {
         // The client constructs its result model from BattleResult. Omitting this
         // nested message leaves the post-battle result screen waiting indefinitely.
+        "/api/pvt/character/story/battle/end" => ProtobufWire.Encode([
+            ProtoField.LengthDelimited(1, []),
+        ]),
         "/api/pvt/story/battle/end" => ProtobufWire.Encode([
             ProtoField.LengthDelimited(1, []),
         ]),

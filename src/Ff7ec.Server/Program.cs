@@ -10,6 +10,11 @@ string capturesDir = config["CapturesDirectory"] ?? throw new InvalidOperationEx
 string certDir = config["CertDirectory"] ?? throw new InvalidOperationException("Ff7ec:CertDirectory not configured");
 string gapsDir = config["GapsDirectory"] ?? throw new InvalidOperationException("Ff7ec:GapsDirectory not configured");
 string dataDir = config["DataDirectory"] ?? throw new InvalidOperationException("Ff7ec:DataDirectory not configured");
+var assetOverrideConfig = config.GetSection("AssetOverride");
+string assetOverrideStateFile = assetOverrideConfig["StateFile"] ?? throw new InvalidOperationException("Ff7ec:AssetOverride:StateFile not configured");
+string assetManifestHost = assetOverrideConfig["ManifestHost"] ?? throw new InvalidOperationException("Ff7ec:AssetOverride:ManifestHost not configured");
+string assetManifestPath = assetOverrideConfig["ManifestPath"] ?? throw new InvalidOperationException("Ff7ec:AssetOverride:ManifestPath not configured");
+string assetDataHost = assetOverrideConfig["AssetHost"] ?? throw new InvalidOperationException("Ff7ec:AssetOverride:AssetHost not configured");
 string[] hostNames = config.GetSection("Hostnames").Get<string[]>()
     ?? throw new InvalidOperationException("Ff7ec:Hostnames not configured");
 
@@ -32,6 +37,12 @@ builder.Services.AddSingleton(sp => new ReplayStore(sp.GetRequiredService<ILogge
 builder.Services.AddSingleton(sp => new GapLogger(sp.GetRequiredService<ILogger<GapLogger>>(), gapsDir));
 builder.Services.AddSingleton(sp => new PartySettingsStore(sp.GetRequiredService<ILogger<PartySettingsStore>>(), dataDir));
 builder.Services.AddSingleton(sp => new StoryStateStore(sp.GetRequiredService<ILogger<StoryStateStore>>(), dataDir));
+builder.Services.AddSingleton(sp => new LocalAssetOverrideStore(
+    sp.GetRequiredService<ILogger<LocalAssetOverrideStore>>(),
+    assetOverrideStateFile,
+    assetManifestHost,
+    assetManifestPath,
+    assetDataHost));
 builder.Services.AddSingleton(sp => new PartyStateMerger(
     sp.GetRequiredService<PartySettingsStore>(),
     sp.GetRequiredService<StoryStateStore>(),
@@ -44,6 +55,7 @@ var app = builder.Build();
 var store = app.Services.GetRequiredService<ReplayStore>();
 var partySettingsStore = app.Services.GetRequiredService<PartySettingsStore>();
 var storyStateStore = app.Services.GetRequiredService<StoryStateStore>();
+var assetOverrideStore = app.Services.GetRequiredService<LocalAssetOverrideStore>();
 var partyStateMerger = app.Services.GetRequiredService<PartyStateMerger>();
 app.Logger.LogInformation("FF7EC offline server ready - {Count} captured responses loaded, listening on :{Port} for {Hosts}",
     store.Count, listenPort, string.Join(", ", hostNames));
@@ -69,6 +81,8 @@ var emptyWriteEndpoints = new HashSet<string>(StringComparer.Ordinal)
     "/api/pvt/dungeon/story/start",
     "/api/pvt/event/solo/battle/end",
     "/api/pvt/event/solo/battle/start",
+    "/api/pvt/character/story/battle/end",
+    "/api/pvt/character/story/battle/start",
     "/api/pvt/character/story/result",
     "/api/pvt/story/battle/end",
     "/api/pvt/story/battle/start",
@@ -90,6 +104,16 @@ app.Run(async context =>
     using var bodyStream = new MemoryStream();
     await request.Body.CopyToAsync(bodyStream);
     var bodyBytes = bodyStream.ToArray();
+
+    if (HttpMethods.IsGet(request.Method) && assetOverrideStore.TryGetAsset(host, pathAndQuery, out var overrideAsset))
+    {
+        context.Response.StatusCode = StatusCodes.Status200OK;
+        context.Response.ContentType = "application/octet-stream";
+        context.Response.ContentLength = overrideAsset.Length;
+        app.Logger.LogInformation("ASSET OVERRIDE {Host}{Path} -> 200 ({Bytes} bytes)", host, pathAndQuery, overrideAsset.Length);
+        await context.Response.Body.WriteAsync(overrideAsset);
+        return;
+    }
 
     var requestPath = request.Path.Value ?? string.Empty;
     var isSettingsWrite = writableSettingsEndpoints.Contains(requestPath);
@@ -197,8 +221,15 @@ app.Run(async context =>
         // Replay the captured response first, then rewrite its encrypted protobuf
         // envelope with the latest state received through the write endpoint.
         var responseBody = captured.Body;
+        if (HttpMethods.IsGet(request.Method) && assetOverrideStore.TryGetManifest(host, pathAndQuery, out var overrideManifest))
+        {
+            responseBody = overrideManifest;
+            context.Response.ContentLength = responseBody.Length;
+            app.Logger.LogInformation("ASSET OVERRIDE manifest applied to {Host}{Path}", host, pathAndQuery);
+        }
+
         var mergedBody = partyStateMerger.MergeReplayResponse(
-            request, captured.Body, context.Response.Headers);
+            request, responseBody, context.Response.Headers);
         if (mergedBody is not null)
         {
             responseBody = mergedBody;

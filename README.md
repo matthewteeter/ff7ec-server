@@ -66,6 +66,7 @@ otherwise the write remains on disk but the server returns HTTP 503.
 
 `POST /api/pvt/dungeon/story/start`, `POST /api/pvt/dungeon/story/end`,
 `POST /api/pvt/story/battle/start`, `POST /api/pvt/story/battle/end`,
+`POST /api/pvt/character/story/battle/start`, `POST /api/pvt/character/story/battle/end`,
 `POST /api/pvt/event/solo/battle/start`, `POST /api/pvt/event/solo/battle/end`,
 `POST /api/pvt/story/select/drama`, `POST /api/pvt/story/result`, and
 `POST /api/pvt/character/story/result` are also acknowledged with generated secure
@@ -126,6 +127,41 @@ Removes the hosts redirect (one more elevation prompt) so the machine can reach 
 servers again - useful while both this tool and the real servers still exist. The CA is
 left installed (harmless) and the server window must be closed manually.
 
+### Tifa 019 local asset override
+
+The launcher is configured to replace `character/003/model/019.d` with the finished local
+bundle at:
+
+```text
+E:\FF7EC_Preservation\viewerdata\bundles\character\003\model\019.d
+```
+
+`Start-Ff7ecOffline.ps1` applies this override before starting the server. The override tool:
+
+- refuses to run while `FF7EC.exe` is open;
+- verifies the source bundle's registered SHA-256;
+- wraps the plaintext UnityFS bundle using FF7EC's Octo XOR format;
+- preserves the asset's identity, object name, dependencies, and generation;
+- updates only its local manifest size, Unity CRC, and MD5 fields;
+- keeps the original manifest, bucket metadata, and cache blob under `data\asset-overrides\tifa-019`;
+- makes the replay server return the patched full manifest and serve the replacement bundle
+  from the original asset host if the client needs to download it again.
+
+`Stop-Ff7ecOffline.ps1` restores the originals before removing the hosts redirect. Manual
+control and status checks are also available:
+
+```powershell
+.\launcher\Set-Ff7ecAssetOverride.ps1 Status
+.\launcher\Set-Ff7ecAssetOverride.ps1 Apply
+.\launcher\Set-Ff7ecAssetOverride.ps1 Restore
+```
+
+Use `Start-Ff7ecOffline.ps1 -SkipAssetOverrides` to launch without applying it, or
+`Stop-Ff7ecOffline.ps1 -KeepAssetOverrides` to leave it installed. Configuration and the
+registered hashes are in `launcher\asset-overrides.json`. If the model is edited again, its
+SHA-256 and Unity AssetBundle CRC must be re-measured before changing that file; this prevents
+an unverified bundle from being installed into the client cache.
+
 **Manual:**
 ```powershell
 cd E:\FF7EC-Server\src\Ff7ec.Server
@@ -183,7 +219,7 @@ See `DUMP_NOTES.txt` in that directory for hashes and exact build metadata.
 
 For validation, machine-wide hosts changes were avoided. The final client was launched
 through Steam and `E:\FF7EC_Preservation\work\redirect_dns.js` was injected with Frida;
-it redirects only the four known FF7EC API host resolutions/connections to localhost.
+it redirects only the five configured FF7EC API/asset host resolutions and connections to localhost.
 The offline CA was installed in the current user's root store with:
 
 ```powershell
