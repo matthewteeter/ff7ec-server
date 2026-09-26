@@ -172,6 +172,10 @@ add hosts file entries for the hostnames listed in `appsettings.json` -> `Ff7ec:
 
 ## Importing a new capture
 
+For the complete live-server refresh procedure, including mitmproxy, Frida,
+private storage, import, writable-overlay handling, and offline validation, see
+[CAPTURE-REFRESH.md](CAPTURE-REFRESH.md).
+
 ```powershell
 python tools\export_capture_store.py path\to\capture.mitm --out captures
 ```
