@@ -9,10 +9,15 @@
 
 .PARAMETER SkipAssetOverrides
     Start offline mode without applying the configured local asset override.
+
+.PARAMETER SkipDamageChallengePatch
+    Launch the game without the build-specific patch that runs Damage Challenge battles
+    locally instead of connecting to the retired authoritative battle server.
 #>
 param(
     [switch]$LaunchGame,
-    [switch]$SkipAssetOverrides
+    [switch]$SkipAssetOverrides,
+    [switch]$SkipDamageChallengePatch
 )
 
 $ErrorActionPreference = "Stop"
@@ -112,6 +117,61 @@ Write-Host "Run Stop-Ff7ecOffline.ps1 when you're done to remove the hosts redir
 if ($LaunchGame) {
     Write-Host "Launching FF7 Ever Crisis via Steam..."
     Start-Process "steam://rungameid/2484110"
+
+    if (-not $SkipDamageChallengePatch) {
+        $gameProcess = $null
+        for ($waited = 0; $waited -lt 120; $waited++) {
+            $gameProcess = Get-Process FF7EC -ErrorAction SilentlyContinue | Select-Object -First 1
+            if ($null -ne $gameProcess) { break }
+            Start-Sleep -Seconds 1
+        }
+        if ($null -eq $gameProcess) {
+            throw "FF7EC did not start within 120 seconds; the Damage Challenge patch was not applied."
+        }
+
+        $gameAssemblyPath = Join-Path (Split-Path -Parent $gameProcess.Path) "GameAssembly.dll"
+        $expectedGameAssemblyHash = "FAA51661BDA8BD7E90FBE122309A910E6D857B0C6F45508DA04C41EF45536CB6"
+        $actualGameAssemblyHash = (Get-FileHash $gameAssemblyPath -Algorithm SHA256).Hash
+        if ($actualGameAssemblyHash -ne $expectedGameAssemblyHash) {
+            throw "Unsupported GameAssembly.dll build ($actualGameAssemblyHash); refusing to apply the Damage Challenge patch."
+        }
+
+        $frida = Get-Command frida.exe -ErrorAction SilentlyContinue
+        if ($null -eq $frida) {
+            throw "frida.exe is required for offline Damage Challenge battles. Install frida-tools or use -SkipDamageChallengePatch."
+        }
+
+        $hookPath = Join-Path $PSScriptRoot "ff7ec-offline-hook.js"
+        $hookLog = Join-Path $root "offline-client-hook.log"
+        $fridaOutputLog = Join-Path $root "offline-client-frida.log"
+        $fridaErrorLog = Join-Path $root "offline-client-frida-error.log"
+        Remove-Item $hookLog,$fridaOutputLog,$fridaErrorLog -Force -ErrorAction SilentlyContinue
+        Write-Host "Applying Damage Challenge local-battle patch..."
+        $fridaProcess = Start-Process -FilePath $frida.Source -ArgumentList @(
+            "-p", $gameProcess.Id,
+            "-l", $hookPath,
+            "-q", "-t", "inf"
+        ) -WindowStyle Hidden -RedirectStandardOutput $fridaOutputLog -RedirectStandardError $fridaErrorLog -PassThru
+
+        $hookReady = $false
+        for ($waited = 0; $waited -lt 20; $waited++) {
+            if ($fridaProcess.HasExited) { break }
+            if (Test-Path $hookLog) {
+                $hookOutput = Get-Content $hookLog -Raw
+                if ($hookOutput -match 'local-battle hook installed') {
+                    $hookReady = $true
+                    break
+                }
+            }
+            Start-Sleep -Milliseconds 250
+        }
+        if (-not $hookReady) {
+            $hookOutput = if (Test-Path $hookLog) { Get-Content $hookLog -Raw } else { "No hook event log was created." }
+            $fridaError = if (Test-Path $fridaErrorLog) { Get-Content $fridaErrorLog -Raw } else { "" }
+            throw "Frida could not keep the Damage Challenge patch attached. $hookOutput $fridaError"
+        }
+        Write-Host "Damage Challenge local-battle patch applied (Frida PID $($fridaProcess.Id))." -ForegroundColor Green
+    }
 }
 }
 catch {

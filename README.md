@@ -68,12 +68,14 @@ otherwise the write remains on disk but the server returns HTTP 503.
 `POST /api/pvt/story/battle/start`, `POST /api/pvt/story/battle/end`,
 `POST /api/pvt/character/story/battle/start`, `POST /api/pvt/character/story/battle/end`,
 `POST /api/pvt/event/solo/battle/start`, `POST /api/pvt/event/solo/battle/end`,
+`POST /api/pvt/damage/challenge/top`, `POST /api/pvt/damage/challenge/battle/start`,
+`POST /api/pvt/damage/challenge/battle/end`, `POST /api/pvt/damage/challenge/ranking/list`,
 `POST /api/pvt/story/select/drama`, `POST /api/pvt/story/result`, and
 `POST /api/pvt/character/story/result` are also acknowledged with generated secure
 responses. They return only the minimal endpoint payload required by the client and do
 not update user tables here, so they are not added to the settings store. This lets
-replayed story dungeons, battles, dialogue, and already-completed episodes continue
-without a captured write.
+replayed story dungeons, battles, challenge flows, dialogue, and already-completed
+episodes continue without a captured write.
 
 ## Scope: "boot + roam"
 
@@ -119,6 +121,14 @@ Starts the server (generating certs on first run), then prompts once for elevati
 install the CA into Windows Trusted Root and redirect the tracked hostnames to
 `127.0.0.1` in the hosts file. Pass `-LaunchGame` to also launch FF7EC via Steam
 afterward.
+
+`-LaunchGame` also applies a Frida compatibility hook for Damage Challenge. That mode
+normally waits for a separate authoritative MagicOnion/gRPC battle server after
+`match/session` and `room/solo/create`; the hook skips that connection only for Damage
+Challenge and changes its party selection to use the game's local solo-battle path. The
+hook is guarded by the supported
+`GameAssembly.dll` SHA-256 and refuses to patch a different game build. It requires
+`frida.exe` from `frida-tools`. Use `-SkipDamageChallengePatch` to launch without it.
 
 ```powershell
 E:\FF7EC-Server\launcher\Stop-Ff7ecOffline.ps1

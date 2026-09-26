@@ -88,6 +88,10 @@ var emptyWriteEndpoints = new HashSet<string>(StringComparer.Ordinal)
     "/api/pvt/story/battle/start",
     "/api/pvt/story/result",
     "/api/pvt/story/select/drama",
+    "/api/pvt/damage/challenge/ranking/list",
+    "/api/pvt/damage/challenge/top",
+    "/api/pvt/damage/challenge/battle/start",
+    "/api/pvt/damage/challenge/battle/end",
 };
 var storyStateEndpoints = new HashSet<string>(StringComparer.Ordinal)
 {

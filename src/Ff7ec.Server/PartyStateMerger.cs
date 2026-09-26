@@ -19,6 +19,7 @@ public sealed class PartyStateMerger
     private const int ApiCharacterStoryBattleStartField = 541;
     private const int ApiCharacterStoryBattleEndField = 542;
     private const int ApiCharacterStoryResultField = 543;
+    private const int ApiDamageChallengeTopField = 663;
     private const int ApiRequestHomeBackgroundSettingField = 526;
     private const int ApiResponseStorePurchaseRestartField = 2001;
     private const int UserPartyMemberTable = 17062056;
@@ -96,7 +97,7 @@ public sealed class PartyStateMerger
         try
         {
             var request = ProtobufWire.Parse(Decompress(Decrypt(requestBody, ClientApiKey)));
-            var responseField = GetEmptyWriteField(endpoint);
+            var responseField = GetEmptyWriteField(endpoint, request);
             var requestField = request.FirstOrDefault(
                 field => field.Number == responseField && field.WireType == 2);
             if (requestField is null)
@@ -289,21 +290,50 @@ public sealed class PartyStateMerger
         _ => throw new InvalidDataException($"Unsupported writable settings endpoint '{endpoint}'."),
     };
 
-    private static int GetEmptyWriteField(string endpoint) => endpoint switch
+    private static int GetEmptyWriteField(string endpoint, List<ProtoField> request)
     {
-        "/api/pvt/dungeon/story/end" => ApiDungeonStoryEndField,
-        "/api/pvt/dungeon/story/start" => ApiDungeonStoryStartField,
-        "/api/pvt/event/solo/battle/end" => ApiEventSoloBattleEndField,
-        "/api/pvt/event/solo/battle/start" => ApiEventSoloBattleStartField,
-        "/api/pvt/character/story/battle/end" => ApiCharacterStoryBattleEndField,
-        "/api/pvt/character/story/battle/start" => ApiCharacterStoryBattleStartField,
-        "/api/pvt/character/story/result" => ApiCharacterStoryResultField,
-        "/api/pvt/story/battle/end" => ApiStoryBattleEndField,
-        "/api/pvt/story/battle/start" => ApiStoryBattleStartField,
-        "/api/pvt/story/result" => ApiStoryResultField,
-        "/api/pvt/story/select/drama" => ApiStorySelectDramaField,
-        _ => throw new InvalidDataException($"Unsupported empty-response write endpoint '{endpoint}'."),
-    };
+        int[] candidates = endpoint switch
+        {
+            "/api/pvt/dungeon/story/end" => [ApiDungeonStoryEndField],
+            "/api/pvt/dungeon/story/start" => [ApiDungeonStoryStartField],
+            "/api/pvt/event/solo/battle/end" => [ApiEventSoloBattleEndField],
+            "/api/pvt/event/solo/battle/start" => [ApiEventSoloBattleStartField],
+            "/api/pvt/character/story/battle/end" => [ApiCharacterStoryBattleEndField],
+            "/api/pvt/character/story/battle/start" => [ApiCharacterStoryBattleStartField],
+            "/api/pvt/character/story/result" => [ApiCharacterStoryResultField],
+            "/api/pvt/story/battle/end" => [ApiStoryBattleEndField],
+            "/api/pvt/story/battle/start" => [ApiStoryBattleStartField],
+            "/api/pvt/story/result" => [ApiStoryResultField],
+            "/api/pvt/story/select/drama" => [ApiStorySelectDramaField],
+            "/api/pvt/damage/challenge/top" => [ApiDamageChallengeTopField],
+            "/api/pvt/damage/challenge/ranking/list" or
+            "/api/pvt/damage/challenge/battle/start" or
+            "/api/pvt/damage/challenge/battle/end" => GetDynamicRequestFields(request, endpoint),
+            _ => throw new InvalidDataException($"Unsupported empty-response write endpoint '{endpoint}'."),
+        };
+
+        foreach (var candidate in candidates)
+        {
+            if (request.Any(field => field.Number == candidate && field.WireType == 2))
+                return candidate;
+        }
+
+        throw new InvalidDataException(
+            $"Write to {endpoint} has none of the expected protobuf request fields.");
+    }
+
+    private static int[] GetDynamicRequestFields(List<ProtoField> request, string endpoint)
+    {
+        var fields = request
+            .Where(field => field.Number != 101 && field.WireType == 2)
+            .Select(field => field.Number)
+            .Distinct()
+            .ToArray();
+        if (fields.Length != 1)
+            throw new InvalidDataException(
+                $"Write to {endpoint} has {fields.Length} endpoint protobuf fields; expected one.");
+        return fields;
+    }
 
     private static byte[] GetWriteResponseValue(string endpoint, byte[] requestValue) => endpoint switch
     {
@@ -315,6 +345,7 @@ public sealed class PartyStateMerger
         "/api/pvt/story/battle/end" => ProtobufWire.Encode([
             ProtoField.LengthDelimited(1, []),
         ]),
+        "/api/pvt/damage/challenge/battle/end" => CreateEventSoloBattleEndResponse(requestValue),
         "/api/pvt/event/solo/battle/end" => CreateEventSoloBattleEndResponse(requestValue),
         _ => [],
     };
