@@ -154,7 +154,8 @@ def main() -> int:
                     stats["total_flows"] += 1
                     export_flow(flow, out_root, stats)
             except FlowReadException as e:
-                print(f"  Flow read stopped early: {e}", file=sys.stderr)
+                print(f"ERROR: Flow read stopped early; replay store may be partially updated: {e}", file=sys.stderr)
+                return 1
 
     print(
         f"Done. total_flows={stats['total_flows']} exported={stats['exported']} "

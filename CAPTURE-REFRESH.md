@@ -35,68 +35,30 @@ still using port 443.
 
 Live capture uses mitmproxy's CA, not the offline server's
 `ff7ec-offline-ca.cer`. Install it in the current user's trusted root store.
-This is a one-time command and does not require administrator privileges:
+This is a one-time script and does not require administrator privileges.
+Only trust a mitmproxy CA that belongs to your own installation:
 
 ```powershell
-certutil.exe -user -addstore -f Root "$HOME\.mitmproxy\mitmproxy-ca-cert.cer"
+& E:\FF7EC-Server\launcher\Trust-Ff7ecCaptureCa.ps1
 ```
 
-## 3. Create a private capture session
+## 3. Start a fresh capture
 
-Run the following in PowerShell:
+In a regular Windows PowerShell window, run this script and leave it open:
 
 ```powershell
-$stamp = Get-Date -Format yyyyMMdd_HHmmss
-$session = "E:\FF7EC_Preservation\captures\$stamp"
-New-Item -ItemType Directory -Force $session | Out-Null
-Copy-Item E:\FF7EC-Server\captures "$session\replay-store-before" -Recurse
-$rawCapture = "$session\ff7ec-progress-refresh-$stamp.mitm"
-$env:FF7EC_CAPTURE_STORE_OUT = "$session\staged-replay"
-Write-Host "Raw capture: $rawCapture"
-Write-Host "Staged replay records: $env:FF7EC_CAPTURE_STORE_OUT"
+& E:\FF7EC-Server\launcher\Start-Ff7ecLiveCapture.ps1
 ```
 
-The copied replay store is a rollback snapshot. Keep the value printed for
-`$rawCapture`; it is needed for the final import. **Run step 4 in this same
-PowerShell window:** `$rawCapture` and `FF7EC_CAPTURE_STORE_OUT` are set only
-there. The addon will write
-replay-ready responses to `staged-replay`, **not** the active server store;
-only the validated import in step 7 updates the active store.
+It creates a timestamped directory under `E:\FF7EC_Preservation\captures`,
+backs up the current replay store to `replay-store-before`, sets the staging
+destination **in the mitmdump process**, and starts mitmdump on port 443.
+It prints the full paths to `capture.mitm` and `staged-replay`. No session
+variables have to persist between commands or PowerShell windows. The addon
+routes the captured requests to the real servers; no live responses go to
+the active replay store until the verified import in step 6.
 
-## 4. Start the live capture proxy
-
-In the **same PowerShell window as step 3**, verify the paths before starting
-mitmdump. Do not reuse variables from an earlier capture session:
-
-```powershell
-if (-not $rawCapture -or -not $session -or
-    -not $env:FF7EC_CAPTURE_STORE_OUT -or
-    $env:FF7EC_CAPTURE_STORE_OUT -ne "$session\staged-replay" -or
-    -not $rawCapture.StartsWith("$session\", [StringComparison]::OrdinalIgnoreCase) -or
-    (Test-Path $rawCapture)) {
-  throw "Capture paths missing, mismatched, or already used. Repeat step 3 in this window."
-}
-Write-Host "Saving raw traffic to $rawCapture"
-Write-Host "Staging responses in $env:FF7EC_CAPTURE_STORE_OUT"
-```
-
-Then run mitmdump and leave it open:
-
-```powershell
-mitmdump `
-  --mode "reverse:https://game-q74z3cyn.app.gl.ffviiec.com@443" `
-  --set keep_host_header=true `
-  --ssl-insecure `
-  --scripts E:\FF7EC_Preservation\work\mitm_ff7ec_addon.py `
-  --save-stream-file $rawCapture
-```
-
-The addon forwards requests to the official hosts through their real IP
-addresses. It logs the staging path and writes replay-ready records there as
-responses arrive. If the staging variable is absent, the addon refuses to load
-rather than silently overwriting the active replay store.
-
-## 5. Redirect FF7EC to the capture proxy
+## 4. Redirect FF7EC to the capture proxy
 
 **Reliable method (requires approval for an administrator prompt):** in a
 second, **elevated** PowerShell window, enable the dedicated live-capture
@@ -109,13 +71,14 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File `
 
 This backs up the original hosts file privately and redirects only the five
 configured game hostnames while capture is active. It does **not** start the
-offline server or install its CA. Leave mitmdump on port 443. Launch the game
-from another window:
+offline server or install its CA. With mitmdump still running, launch the
+game from a third, regular PowerShell window:
 
 ```powershell
-Start-Process 'steam://rungameid/2484110'
+& E:\FF7EC-Server\launcher\Launch-Ff7ecLiveGame.ps1
 ```
 
+The launch script checks that routing is active and port 443 is listening.
 When finished with live capture, close the game and disable capture routing
 in the elevated PowerShell window **before** starting offline mode:
 
@@ -124,26 +87,17 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File `
   E:\FF7EC-Server\launcher\Set-Ff7ecCaptureRouting.ps1 -Action Disable
 ```
 
-**No-admin fallback:** launch through Steam and attach Frida as soon as the
-process appears in a second PowerShell window:
+**No-admin fallback:** if you cannot approve the hosts-file change, start
+the capture script in step 3, then run this in a second PowerShell window:
 
 ```powershell
-if (Get-Process FF7EC -ErrorAction SilentlyContinue) {
-  throw "Close FF7EC before starting a new capture."
-}
-Start-Process 'steam://rungameid/2484110'
-do {
-  $game = Get-Process FF7EC -ErrorAction SilentlyContinue |
-    Select-Object -First 1
-  if (-not $game) { Start-Sleep -Milliseconds 100 }
-} until ($game)
-$gamePid = $game.Id
-frida -p $gamePid -l E:\FF7EC_Preservation\work\redirect_dns.js
+& E:\FF7EC-Server\launcher\Launch-Ff7ecLiveGame.ps1 -UseFrida
 ```
 
 Do not use `frida -W FF7EC.exe` on Windows: its spawn-gating mode reports
 `Failed to enable spawn gating: not yet supported on this OS` and does not
-install the hook. Steam must launch the game; Frida then attaches by PID.
+install the hook. The launch script starts Steam, then attaches Frida by PID;
+leave its window open while playing.
 
 Wait for Frida to report:
 
@@ -165,7 +119,7 @@ Do not assume the hook message alone means that the account was captured.
 If `/api/pvt/user/title` is absent in mitmdump, use the reliable routing
 method on the next attempt.
 
-## 6. Exercise the live account
+## 5. Exercise the live account
 
 At minimum, continue from the title screen to Home. The
 `POST /api/pvt/user/title` response contains the large account snapshot.
@@ -194,43 +148,27 @@ When finished:
 Do not start the offline server until mitmdump has released port 443 and
 live-capture routing has been disabled.
 
-## 7. Verify, then import the completed raw capture
+## 6. Verify, then import the completed raw capture
 
-Use the actual timestamped path printed in step 3. **Verify without changing
-the replay store first:**
-
-```powershell
-$rawCapture = "E:\FF7EC_Preservation\captures\YYYYMMDD_HHMMSS\ff7ec-progress-refresh-YYYYMMDD_HHMMSS.mitm"
-python E:\FF7EC-Server\tools\export_capture_store.py `
-  $rawCapture --check-only --require-user-title
-if ($LASTEXITCODE -ne 0) { throw "Account snapshot missing; do not import this capture." }
-```
-
-The check must report at least one successful account snapshot and a timestamp
-from **this** capture session. If it reports zero, your catalog requests were
-captured but your current account state was **not**. Restart live capture
-with routing enabled *before* the Steam launch, then repeat.
-
-When verification succeeds, import into the active replay store:
+With mitmdump stopped and live-capture routing disabled, run:
 
 ```powershell
-python E:\FF7EC-Server\tools\export_capture_store.py `
-  $rawCapture --require-user-title --out E:\FF7EC-Server\captures
-if ($LASTEXITCODE -ne 0) { throw "Import failed; leave the offline server stopped." }
+& E:\FF7EC-Server\launcher\Finish-Ff7ecLiveCapture.ps1
 ```
 
-Review the most recently refreshed records:
-
-```powershell
-Get-ChildItem E:\FF7EC-Server\captures -Recurse -Filter *.meta.json |
-  Sort-Object LastWriteTime -Descending |
-  Select-Object -First 30 FullName, LastWriteTime
-```
+By default it selects the newest session **created by the start script**,
+not an old `$rawCapture` variable. You can explicitly select a session with
+`-SessionDirectory 'E:\FF7EC_Preservation\captures\YYYYMMDD_HHMMSS'`.
+The finish script verifies the raw `.mitm` and that a successful nonempty
+`POST /api/pvt/user/title` response was staged **after this session started**
+before it imports anything. It then verifies that the imported account
+snapshot matches the staged response. If it reports zero account snapshots,
+your current account state was not captured; do not use that capture.
 
 Do not remove older replay records merely because they were not requested in
 this session. They may provide coverage for screens that were not revisited.
 
-## 8. Handle local writable overlays
+## 7. Handle local writable overlays
 
 The replay server may have local offline changes in:
 
@@ -241,26 +179,19 @@ E:\FF7EC-Server\data\story-state.json
 
 Those overlays intentionally take precedence over corresponding values in the
 captured account snapshot. To test exactly what the official server returned,
-move the files to a timestamped private backup:
+move them to a timestamped private backup with:
 
 ```powershell
-$backup = "E:\FF7EC_Preservation\state-backups\$(Get-Date -Format yyyyMMdd_HHmmss)"
-New-Item -ItemType Directory -Force $backup | Out-Null
-$stateFiles = @(
-  "E:\FF7EC-Server\data\party-settings.json"
-  "E:\FF7EC-Server\data\story-state.json"
-)
-Get-Item $stateFiles -ErrorAction SilentlyContinue |
-  Move-Item -Destination $backup
+& E:\FF7EC-Server\launcher\Backup-Ff7ecLocalState.ps1
 ```
 
 This step is optional. Keep the local files if the offline party, wallpaper,
 or story selections should continue overriding the newly captured values.
 These files do not explain stale crystals or costume ownership; for those,
-verify the timestamp of the captured title response in step 7.
+verify the timestamp of the captured title response in step 6.
 Leave `data\asset-overrides` in place.
 
-## 9. Validate offline replay
+## 8. Validate offline replay
 
 Start offline mode and launch the game:
 

@@ -174,7 +174,10 @@ add hosts file entries for the hostnames listed in `appsettings.json` -> `Ff7ec:
 
 For the complete live-server refresh procedure, including mitmproxy, Frida,
 private storage, import, writable-overlay handling, and offline validation, see
-[CAPTURE-REFRESH.md](CAPTURE-REFRESH.md).
+[CAPTURE-REFRESH.md](CAPTURE-REFRESH.md). It uses the PowerShell scripts under
+`launcher/` to create a fresh capture session and verify its account snapshot
+before importing; no capture paths or session variables need to be copied
+between terminal windows.
 
 ```powershell
 python tools\export_capture_store.py path\to\capture.mitm --out captures
