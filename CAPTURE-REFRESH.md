@@ -53,16 +53,34 @@ Copy-Item E:\FF7EC-Server\captures "$session\replay-store-before" -Recurse
 $rawCapture = "$session\ff7ec-progress-refresh-$stamp.mitm"
 $env:FF7EC_CAPTURE_STORE_OUT = "$session\staged-replay"
 Write-Host "Raw capture: $rawCapture"
+Write-Host "Staged replay records: $env:FF7EC_CAPTURE_STORE_OUT"
 ```
 
 The copied replay store is a rollback snapshot. Keep the value printed for
-`$rawCapture`; it is needed for the final import. The addon will write
+`$rawCapture`; it is needed for the final import. **Run step 4 in this same
+PowerShell window:** `$rawCapture` and `FF7EC_CAPTURE_STORE_OUT` are set only
+there. The addon will write
 replay-ready responses to `staged-replay`, **not** the active server store;
 only the validated import in step 7 updates the active store.
 
 ## 4. Start the live capture proxy
 
-In the same PowerShell window, run mitmdump and leave it open:
+In the **same PowerShell window as step 3**, verify the paths before starting
+mitmdump. Do not reuse variables from an earlier capture session:
+
+```powershell
+if (-not $rawCapture -or -not $session -or
+    -not $env:FF7EC_CAPTURE_STORE_OUT -or
+    $env:FF7EC_CAPTURE_STORE_OUT -ne "$session\staged-replay" -or
+    -not $rawCapture.StartsWith("$session\", [StringComparison]::OrdinalIgnoreCase) -or
+    (Test-Path $rawCapture)) {
+  throw "Capture paths missing, mismatched, or already used. Repeat step 3 in this window."
+}
+Write-Host "Saving raw traffic to $rawCapture"
+Write-Host "Staging responses in $env:FF7EC_CAPTURE_STORE_OUT"
+```
+
+Then run mitmdump and leave it open:
 
 ```powershell
 mitmdump `
@@ -74,8 +92,9 @@ mitmdump `
 ```
 
 The addon forwards requests to the official hosts through their real IP
-addresses. It also writes replay-ready records into the private staging folder
-as responses arrive.
+addresses. It logs the staging path and writes replay-ready records there as
+responses arrive. If the staging variable is absent, the addon refuses to load
+rather than silently overwriting the active replay store.
 
 ## 5. Redirect FF7EC to the capture proxy
 
@@ -188,7 +207,7 @@ if ($LASTEXITCODE -ne 0) { throw "Account snapshot missing; do not import this c
 ```
 
 The check must report at least one successful account snapshot and a timestamp
-from this capture session. If it reports zero, your catalog requests were
+from **this** capture session. If it reports zero, your catalog requests were
 captured but your current account state was **not**. Restart live capture
 with routing enabled *before* the Steam launch, then repeat.
 
