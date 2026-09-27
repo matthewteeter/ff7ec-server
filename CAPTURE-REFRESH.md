@@ -12,7 +12,11 @@ The capture pipeline stores two forms of data:
   `E:\FF7EC-Server\captures\`. The C# server loads these files at startup.
 
 Importing a new capture is additive. A later response replaces an earlier one
-only when its `(host, method, path+query)` replay key is identical.
+only when its `(host, method, path+query)` replay key is identical. **Do not
+import until the capture contains a fresh `POST /api/pvt/user/title` response.**
+That is the account snapshot the offline server uses for characters, costumes,
+crystals, and other account state. An empty `gaps/` directory is not proof of
+freshness: old responses can still satisfy every request.
 
 ## 1. Stop offline mode
 
@@ -47,11 +51,14 @@ $session = "E:\FF7EC_Preservation\captures\$stamp"
 New-Item -ItemType Directory -Force $session | Out-Null
 Copy-Item E:\FF7EC-Server\captures "$session\replay-store-before" -Recurse
 $rawCapture = "$session\ff7ec-progress-refresh-$stamp.mitm"
+$env:FF7EC_CAPTURE_STORE_OUT = "$session\staged-replay"
 Write-Host "Raw capture: $rawCapture"
 ```
 
 The copied replay store is a rollback snapshot. Keep the value printed for
-`$rawCapture`; it is needed for the final import.
+`$rawCapture`; it is needed for the final import. The addon will write
+replay-ready responses to `staged-replay`, **not** the active server store;
+only the validated import in step 7 updates the active store.
 
 ## 4. Start the live capture proxy
 
@@ -67,13 +74,39 @@ mitmdump `
 ```
 
 The addon forwards requests to the official hosts through their real IP
-addresses. It also writes replay-ready records directly into
-`E:\FF7EC-Server\captures` as responses arrive.
+addresses. It also writes replay-ready records into the private staging folder
+as responses arrive.
 
 ## 5. Redirect FF7EC to the capture proxy
 
-Open a second PowerShell window. Launch through Steam, wait for its process,
-and attach Frida as soon as it appears; leave this window open:
+**Reliable method (requires approval for an administrator prompt):** in a
+second, **elevated** PowerShell window, enable the dedicated live-capture
+hosts-file block *before* launching the game:
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File `
+  E:\FF7EC-Server\launcher\Set-Ff7ecCaptureRouting.ps1 -Action Enable
+```
+
+This backs up the original hosts file privately and redirects only the five
+configured game hostnames while capture is active. It does **not** start the
+offline server or install its CA. Leave mitmdump on port 443. Launch the game
+from another window:
+
+```powershell
+Start-Process 'steam://rungameid/2484110'
+```
+
+When finished with live capture, close the game and disable capture routing
+in the elevated PowerShell window **before** starting offline mode:
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File `
+  E:\FF7EC-Server\launcher\Set-Ff7ecCaptureRouting.ps1 -Action Disable
+```
+
+**No-admin fallback:** launch through Steam and attach Frida as soon as the
+process appears in a second PowerShell window:
 
 ```powershell
 if (Get-Process FF7EC -ErrorAction SilentlyContinue) {
@@ -106,11 +139,12 @@ mitmdump window:
 [ff7ec] exported POST ...
 ```
 
-Wait for the hook before continuing past the title screen. If boot traffic
-occurs before Frida attaches, that traffic will not be intercepted; verify
-that the account snapshot appears in mitmdump after entering Home. If the
-client cannot connect or the snapshot was missed, close FF7EC, restart the
-capture, and retry the Steam-launch-and-attach sequence.
+Wait for the hook before continuing past the title screen. **Frida attaches
+after process start:** if boot/login or title requests happen earlier, they
+will bypass mitmdump even though the hook subsequently reports "installed".
+Do not assume the hook message alone means that the account was captured.
+If `/api/pvt/user/title` is absent in mitmdump, use the reliable routing
+method on the next attempt.
 
 ## 6. Exercise the live account
 
@@ -134,20 +168,36 @@ actions.
 When finished:
 
 1. Exit FF7EC normally.
-2. Press **Ctrl+C** in the Frida window.
+2. If using Frida, press **Ctrl+C** in its window.
 3. Press **Ctrl+C** in the mitmdump window.
+4. If using the hosts-file method, run the `-Action Disable` command above.
 
-Do not start the offline server until mitmdump has released port 443.
+Do not start the offline server until mitmdump has released port 443 and
+live-capture routing has been disabled.
 
-## 7. Import the completed raw capture
+## 7. Verify, then import the completed raw capture
 
-The addon exports records during capture, but run the importer afterward as a
-deterministic final pass. Use the actual timestamped path printed in step 3:
+Use the actual timestamped path printed in step 3. **Verify without changing
+the replay store first:**
+
+```powershell
+$rawCapture = "E:\FF7EC_Preservation\captures\YYYYMMDD_HHMMSS\ff7ec-progress-refresh-YYYYMMDD_HHMMSS.mitm"
+python E:\FF7EC-Server\tools\export_capture_store.py `
+  $rawCapture --check-only --require-user-title
+if ($LASTEXITCODE -ne 0) { throw "Account snapshot missing; do not import this capture." }
+```
+
+The check must report at least one successful account snapshot and a timestamp
+from this capture session. If it reports zero, your catalog requests were
+captured but your current account state was **not**. Restart live capture
+with routing enabled *before* the Steam launch, then repeat.
+
+When verification succeeds, import into the active replay store:
 
 ```powershell
 python E:\FF7EC-Server\tools\export_capture_store.py `
-  "E:\FF7EC_Preservation\captures\YYYYMMDD_HHMMSS\ff7ec-progress-refresh-YYYYMMDD_HHMMSS.mitm" `
-  --out E:\FF7EC-Server\captures
+  $rawCapture --require-user-title --out E:\FF7EC-Server\captures
+if ($LASTEXITCODE -ne 0) { throw "Import failed; leave the offline server stopped." }
 ```
 
 Review the most recently refreshed records:
@@ -187,6 +237,8 @@ Get-Item $stateFiles -ErrorAction SilentlyContinue |
 
 This step is optional. Keep the local files if the offline party, wallpaper,
 or story selections should continue overriding the newly captured values.
+These files do not explain stale crystals or costume ownership; for those,
+verify the timestamp of the captured title response in step 7.
 Leave `data\asset-overrides` in place.
 
 ## 9. Validate offline replay
@@ -204,8 +256,10 @@ E:\FF7EC-Server\gaps
 ```
 
 An empty gaps directory means every request made during that validation run
-matched a replay record. A gap identifies an endpoint that must be exercised
-during another live capture.
+matched a replay record; it does **not** prove that the record is new. Check
+the title snapshot's `capturedAt` value, and compare the actual crystals and
+costumes visible in the client. A gap identifies an endpoint that must be
+exercised during another live capture.
 
 When validation is complete:
 

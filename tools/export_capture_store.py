@@ -15,9 +15,11 @@ safe and additive - it never loses previously-captured breadth unless a newer
 capture legitimately updates the same endpoint.
 
 Usage:
-    python export_capture_store.py capture_rehearsal.mitm [more.mitm ...] [--out DIR]
+    python export_capture_store.py capture.mitm --check-only --require-user-title
+    python export_capture_store.py capture.mitm --require-user-title [--out DIR]
 """
 import argparse
+from datetime import datetime, timezone
 import hashlib
 import json
 import re
@@ -76,6 +78,29 @@ def export_flow(flow, out_root: Path, stats: dict) -> None:
     stats["exported"] += 1
 
 
+def capture_summary(paths: list[Path]) -> dict:
+    summary = {"game_responses": 0, "account_snapshots": []}
+    for path in paths:
+        with path.open("rb") as f:
+            reader = mitm_io.FlowReader(f)
+            for flow in reader.stream():
+                if not hasattr(flow, "request") or flow.response is None:
+                    continue
+                req = flow.request
+                if "UnityPlayer" not in req.headers.get("User-Agent", ""):
+                    continue
+                summary["game_responses"] += 1
+                if (
+                    req.headers.get("Host", req.host) == "game-q74z3cyn.app.gl.ffviiec.com"
+                    and req.method.upper() == "POST"
+                    and req.path.split("?", 1)[0] == "/api/pvt/user/title"
+                    and flow.response.status_code == 200
+                    and flow.response.raw_content
+                ):
+                    summary["account_snapshots"].append(req.timestamp_start)
+    return summary
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("captures", nargs="+", help="One or more .mitm capture files")
@@ -84,18 +109,43 @@ def main() -> int:
         default=r"E:\FF7EC-Server\captures",
         help="Output CaptureStore root directory",
     )
+    ap.add_argument(
+        "--require-user-title",
+        action="store_true",
+        help="Refuse to import unless a successful account snapshot was captured",
+    )
+    ap.add_argument(
+        "--check-only",
+        action="store_true",
+        help="Inspect capture without writing to the replay store",
+    )
     args = ap.parse_args()
+
+    paths = [Path(p) for p in args.captures]
+    for path in paths:
+        if not path.is_file():
+            ap.error(f"Capture file does not exist: {path}")
+    try:
+        summary = capture_summary(paths)
+    except (FlowReadException, OSError) as e:
+        ap.error(f"Could not read capture: {e}")
+    snapshots = summary["account_snapshots"]
+    print(f"Game responses: {summary['game_responses']}; successful account snapshots: {len(snapshots)}")
+    if snapshots:
+        captured = datetime.fromtimestamp(max(snapshots), tz=timezone.utc)
+        print(f"Latest account snapshot (UTC): {captured:%Y-%m-%d %H:%M:%S}")
+    if args.require_user_title and not snapshots:
+        print("ERROR: No successful POST /api/pvt/user/title response; account state was not captured.", file=sys.stderr)
+        return 1
+    if args.check_only:
+        return 0
 
     out_root = Path(args.out)
     out_root.mkdir(parents=True, exist_ok=True)
 
     stats = {"exported": 0, "skipped_non_game": 0, "total_flows": 0}
 
-    for capture_path in args.captures:
-        p = Path(capture_path)
-        if not p.exists():
-            print(f"WARNING: {p} does not exist, skipping", file=sys.stderr)
-            continue
+    for p in paths:
         print(f"Reading {p} ...")
         with p.open("rb") as f:
             reader = mitm_io.FlowReader(f)
