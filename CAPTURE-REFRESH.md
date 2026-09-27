@@ -72,18 +72,26 @@ addresses. It also writes replay-ready records directly into
 
 ## 5. Redirect FF7EC to the capture proxy
 
-Open a second PowerShell window. Start Frida before launching the game and
-leave it attached:
+Open a second PowerShell window. Launch through Steam, wait for its process,
+and attach Frida as soon as it appears; leave this window open:
 
 ```powershell
-frida -W FF7EC.exe -l E:\FF7EC_Preservation\work\redirect_dns.js
-```
-
-Open a third PowerShell window and launch FF7EC through Steam:
-
-```powershell
+if (Get-Process FF7EC -ErrorAction SilentlyContinue) {
+  throw "Close FF7EC before starting a new capture."
+}
 Start-Process 'steam://rungameid/2484110'
+do {
+  $game = Get-Process FF7EC -ErrorAction SilentlyContinue |
+    Select-Object -First 1
+  if (-not $game) { Start-Sleep -Milliseconds 100 }
+} until ($game)
+$gamePid = $game.Id
+frida -p $gamePid -l E:\FF7EC_Preservation\work\redirect_dns.js
 ```
+
+Do not use `frida -W FF7EC.exe` on Windows: its spawn-gating mode reports
+`Failed to enable spawn gating: not yet supported on this OS` and does not
+install the hook. Steam must launch the game; Frida then attaches by PID.
 
 Wait for Frida to report:
 
@@ -98,8 +106,11 @@ mitmdump window:
 [ff7ec] exported POST ...
 ```
 
-If FF7EC was already running when Frida was started, close both, restart the
-Frida command, and launch FF7EC through Steam again.
+Wait for the hook before continuing past the title screen. If boot traffic
+occurs before Frida attaches, that traffic will not be intercepted; verify
+that the account snapshot appears in mitmdump after entering Home. If the
+client cannot connect or the snapshot was missed, close FF7EC, restart the
+capture, and retry the Steam-launch-and-attach sequence.
 
 ## 6. Exercise the live account
 
