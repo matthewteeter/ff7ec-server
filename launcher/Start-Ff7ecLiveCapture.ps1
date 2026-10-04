@@ -35,9 +35,17 @@ $CaptureRoot = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFrom
 $session = Join-Path $CaptureRoot (Get-Date -Format "yyyyMMdd_HHmmss")
 if (Test-Path -LiteralPath $session) { throw "Capture session already exists: $session. Retry in a second." }
 $replayStore = Join-Path $root "captures"
-if (-not (Test-Path -LiteralPath $replayStore -PathType Container)) { throw "Replay store not found: $replayStore" }
+if ((Test-Path -LiteralPath $replayStore) -and -not (Test-Path -LiteralPath $replayStore -PathType Container)) {
+    throw "Replay store is not a directory: $replayStore"
+}
 New-Item -ItemType Directory -Path $session -Force | Out-Null
-Copy-Item -LiteralPath $replayStore -Destination (Join-Path $session "replay-store-before") -Recurse -ErrorAction Stop
+$backup = Join-Path $session "replay-store-before"
+if (Test-Path -LiteralPath $replayStore -PathType Container) {
+    Copy-Item -LiteralPath $replayStore -Destination $backup -Recurse -ErrorAction Stop
+} else {
+    New-Item -ItemType Directory -Path $backup | Out-Null
+    Write-Host "No existing replay store; starting the first capture with an empty rollback snapshot."
+}
 $raw = Join-Path $session "capture.mitm"
 $stage = Join-Path $session "staged-replay"
 $manifest = Join-Path $session "capture-session.json"

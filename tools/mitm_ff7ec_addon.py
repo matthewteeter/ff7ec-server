@@ -26,6 +26,7 @@ from mitmproxy import ctx
 TRACKED_HOSTS = [
     "game-q74z3cyn.app.gl.ffviiec.com",
     "resources-api-c9ps53g2.app.gl.ffviiec.com",
+    "resources-data-w6d4k7cz.app.gl.ffviiec.com",
     "webview-w62j4u3y.app.gl.ffviiec.com",
     "client-masterdata-c9ps53g2.app.gl.ffviiec.com",
 ]
