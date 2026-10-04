@@ -2,7 +2,7 @@
 Converts one or more mitmproxy .mitm capture files into the FF7EC-Server
 CaptureStore folder format the C# replay server reads at startup.
 
-CaptureStore layout (under --out, default E:\\FF7EC-Server\\captures):
+CaptureStore layout (under --out, default the repository's captures directory):
     captures/
       {host}/
         {METHOD}_{slug}_{hash8}.meta.json   -- status, headers, pathAndQuery, capturedAt, sourceFlow
@@ -106,7 +106,7 @@ def main() -> int:
     ap.add_argument("captures", nargs="+", help="One or more .mitm capture files")
     ap.add_argument(
         "--out",
-        default=r"E:\FF7EC-Server\captures",
+        default=str(Path(__file__).resolve().parent.parent / "captures"),
         help="Output CaptureStore root directory",
     )
     ap.add_argument(

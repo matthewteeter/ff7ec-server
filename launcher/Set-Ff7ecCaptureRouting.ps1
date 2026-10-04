@@ -38,7 +38,7 @@ if ($Action -eq "Enable") {
     }
     $lines = @($begin) + @($hosts | ForEach-Object { "127.0.0.1 $_" }) + @($end)
     $block = ($lines -join $newline) + $newline
-    $backupDir = "E:\FF7EC_Preservation\captures"
+    $backupDir = Join-Path (& (Join-Path $PSScriptRoot "Get-Ff7ecPreservationRoot.ps1")) "captures"
     New-Item -ItemType Directory -Path $backupDir -Force | Out-Null
     $backup = Join-Path $backupDir ("hosts-before-live-capture-{0}.bak" -f (Get-Date -Format "yyyyMMdd_HHmmss"))
     Copy-Item $hostsPath $backup -ErrorAction Stop

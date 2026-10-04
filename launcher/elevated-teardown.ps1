@@ -33,5 +33,5 @@ catch {
     Log "ERROR: $($_.Exception.Message)"
 }
 finally {
-    $log | Out-File -FilePath $LogPath -Encoding utf8
+    $log | Out-File -LiteralPath $LogPath -Encoding utf8
 }

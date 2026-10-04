@@ -4,7 +4,7 @@
     Keep this window open until you exit the game, then press Ctrl+C.
 #>
 param(
-    [string]$CaptureRoot = "E:\FF7EC_Preservation\captures"
+    [string]$CaptureRoot
 )
 
 $ErrorActionPreference = "Stop"
@@ -13,14 +13,14 @@ $addon = Join-Path $root "tools\mitm_ff7ec_addon.py"
 $ca = Join-Path $HOME ".mitmproxy\mitmproxy-ca-cert.cer"
 $hostsFile = Join-Path $env:SystemRoot "System32\drivers\etc\hosts"
 
-if (-not (Test-Path $addon -PathType Leaf)) { throw "Capture addon not found: $addon" }
-if (-not (Test-Path $ca -PathType Leaf)) { throw "mitmproxy CA not found: $ca" }
+if (-not (Test-Path -LiteralPath $addon -PathType Leaf)) { throw "Capture addon not found: $addon" }
+if (-not (Test-Path -LiteralPath $ca -PathType Leaf)) { throw "mitmproxy CA not found: $ca" }
 if (-not (Get-Command mitmdump -ErrorAction SilentlyContinue)) { throw "mitmdump is not installed or not on PATH." }
 if (Get-Process FF7EC -ErrorAction SilentlyContinue) { throw "Close FF7EC before starting the capture." }
-if ((Get-Content $hostsFile) -contains "# FF7EC-Offline-Server") {
+if ((Get-Content -LiteralPath $hostsFile) -contains "# FF7EC-Offline-Server") {
     throw "Offline routing is enabled. Run Stop-Ff7ecOffline.ps1 before capturing."
 }
-if ((Get-Content $hostsFile) -contains "# FF7EC-Live-Capture BEGIN") {
+if ((Get-Content -LiteralPath $hostsFile) -contains "# FF7EC-Live-Capture BEGIN") {
     throw "Live-capture routing is already enabled. Disable it before starting a new session."
 }
 if (Get-NetTCPConnection -LocalPort 443 -State Listen -ErrorAction SilentlyContinue) {
@@ -28,12 +28,16 @@ if (Get-NetTCPConnection -LocalPort 443 -State Listen -ErrorAction SilentlyConti
 }
 
 $started = [DateTimeOffset]::UtcNow
+if (-not $CaptureRoot) {
+    $CaptureRoot = Join-Path (& (Join-Path $PSScriptRoot "Get-Ff7ecPreservationRoot.ps1")) "captures"
+}
+$CaptureRoot = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($CaptureRoot)
 $session = Join-Path $CaptureRoot (Get-Date -Format "yyyyMMdd_HHmmss")
-if (Test-Path $session) { throw "Capture session already exists: $session. Retry in a second." }
+if (Test-Path -LiteralPath $session) { throw "Capture session already exists: $session. Retry in a second." }
 $replayStore = Join-Path $root "captures"
-if (-not (Test-Path $replayStore -PathType Container)) { throw "Replay store not found: $replayStore" }
+if (-not (Test-Path -LiteralPath $replayStore -PathType Container)) { throw "Replay store not found: $replayStore" }
 New-Item -ItemType Directory -Path $session -Force | Out-Null
-Copy-Item $replayStore (Join-Path $session "replay-store-before") -Recurse -ErrorAction Stop
+Copy-Item -LiteralPath $replayStore -Destination (Join-Path $session "replay-store-before") -Recurse -ErrorAction Stop
 $raw = Join-Path $session "capture.mitm"
 $stage = Join-Path $session "staged-replay"
 $manifest = Join-Path $session "capture-session.json"
@@ -41,7 +45,7 @@ $manifest = Join-Path $session "capture-session.json"
     startedAtUtc = $started.ToString("o")
     rawCapture = $raw
     stagedReplay = $stage
-} | ConvertTo-Json | Set-Content $manifest -Encoding UTF8
+} | ConvertTo-Json | Set-Content -LiteralPath $manifest -Encoding UTF8
 
 $priorOut = [Environment]::GetEnvironmentVariable("FF7EC_CAPTURE_STORE_OUT", "Process")
 try {

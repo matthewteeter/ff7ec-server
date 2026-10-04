@@ -18,7 +18,7 @@ function Log($msg) { $log.Add($msg); }
 
 try {
     # --- 1. Install root CA into Trusted Root (idempotent: skip if already present) ---
-    $newCert = Get-PfxCertificate -FilePath $CaCerPath
+    $newCert = Get-PfxCertificate -LiteralPath $CaCerPath
     $existing = Get-ChildItem Cert:\LocalMachine\Root | Where-Object { $_.Thumbprint -eq $newCert.Thumbprint }
     if ($existing) {
         Log "CA already installed in Trusted Root (thumbprint $($newCert.Thumbprint))."
@@ -53,5 +53,5 @@ catch {
     Log "ERROR: $($_.Exception.Message)"
 }
 finally {
-    $log | Out-File -FilePath $LogPath -Encoding utf8
+    $log | Out-File -LiteralPath $LogPath -Encoding utf8
 }

@@ -121,9 +121,26 @@ requires encrypted manifests.
 
 ## Running it
 
+Run commands from the repository root; the repository can be cloned to any drive.
+Server storage paths in `appsettings.json` are relative to `src\Ff7ec.Server`, not
+the shell's current directory. The launcher resolves its certificate path the same way.
+The importer defaults to this repository's `captures` folder.
+
+Private preservation storage is selected automatically by
+`launcher\Get-Ff7ecPreservationRoot.ps1`: it tries `E:\FF7EC_Preservation`, then
+`C:\FF7EC_Preservation`, then `%LOCALAPPDATA%\FF7EC_Preservation`. Missing drives
+are skipped; unwritable locations produce a warning before trying the next folder.
+To choose another writable folder, set `FF7EC_PRESERVATION_ROOT` in your user
+environment or in every PowerShell window used for capture. An unwritable explicit
+choice fails rather than silently storing private data elsewhere. Capture and backup
+scripts still accept their explicit `-CaptureRoot`, `-SessionDirectory`, and
+`-BackupRoot` parameters. The selected preservation root must be outside the
+source repository. Relative `-CaptureRoot` paths are normalized before session
+manifests are written, so the finish script can locate the same files.
+
 **One-click (recommended):**
 ```powershell
-E:\FF7EC-Server\launcher\Start-Ff7ecOffline.ps1 [-LaunchGame]
+.\launcher\Start-Ff7ecOffline.ps1 [-LaunchGame]
 ```
 Starts the server (generating certs on first run), then prompts once for elevation to
 install the CA into Windows Trusted Root and redirect the tracked hostnames to
@@ -131,7 +148,7 @@ install the CA into Windows Trusted Root and redirect the tracked hostnames to
 afterward.
 
 ```powershell
-E:\FF7EC-Server\launcher\Stop-Ff7ecOffline.ps1
+.\launcher\Stop-Ff7ecOffline.ps1
 ```
 Removes the hosts redirect (one more elevation prompt) so the machine can reach the real
 servers again - useful while both this tool and the real servers still exist. The CA is
@@ -143,8 +160,16 @@ The launcher is configured to replace `character/003/model/019.d` with the finis
 bundle at:
 
 ```text
-E:\FF7EC_Preservation\viewerdata\bundles\character\003\model\019.d
+<preservationRoot>\viewerdata\bundles\character\003\model\019.d
 ```
+
+The launcher expands `%FF7EC_PRESERVATION_ROOT%` in the configured source paths.
+It discovers FF7EC in Steam's registered libraries; set `FF7EC_GAME_DIRECTORY`
+to override that discovery. Custom absolute paths in the JSON remain supported;
+relative game and source paths are resolved against the configuration file's folder.
+When invoking the asset-override .NET tool directly, set both environment variables
+first. Use the same preservation root as the costume viewer; existing data is not
+copied or moved automatically.
 
 `Start-Ff7ecOffline.ps1` applies this override before starting the server. The override tool:
 
@@ -174,10 +199,10 @@ an unverified bundle from being installed into the client cache.
 
 **Manual:**
 ```powershell
-cd E:\FF7EC-Server\src\Ff7ec.Server
+cd .\src\Ff7ec.Server
 dotnet run
 ```
-Then separately install `certs\ff7ec-offline-ca.cer` into `Cert:\LocalMachine\Root` and
+Then separately install `..\..\certs\ff7ec-offline-ca.cer` into `Cert:\LocalMachine\Root` and
 add hosts file entries for the hostnames listed in `appsettings.json` -> `Ff7ec:Hostnames`.
 
 ## Importing a new capture
@@ -218,8 +243,8 @@ replay gaps**. The application-layer encrypted API responses were replayed uncha
 
 The definitive raw captures are stored outside this repo at:
 
-- `E:\FF7EC_Preservation\work\capture_final_24813881.mitm`
-- `E:\FF7EC_Preservation\work\capture_final_24813881_second.mitm`
+- `<preservationRoot>\work\capture_final_24813881.mitm`
+- `<preservationRoot>\work\capture_final_24813881_second.mitm`
 
 They contain private account/session traffic and should not be published. The imported
 response store is likewise intended only for the account that produced the capture.
@@ -227,7 +252,7 @@ response store is likewise intended only for the account that produced the captu
 ### Final IL2CPP dump
 
 The final-build dump is at
-`E:\FF7EC_Preservation\work\il2cpp_dump_final_24813881\` and contains `dump.cs` plus
+`<preservationRoot>\work\il2cpp_dump_final_24813881\` and contains `dump.cs` plus
 157 `DummyDll` files (156 assemblies and `__Generated`). The source memory image was
 captured from the live process at base `0x7ff92fa20000` with zero unreadable pages.
 See `DUMP_NOTES.txt` in that directory for hashes and exact build metadata.
@@ -235,12 +260,12 @@ See `DUMP_NOTES.txt` in that directory for hashes and exact build metadata.
 ### No-admin validation path
 
 For validation, machine-wide hosts changes were avoided. The final client was launched
-through Steam and `E:\FF7EC_Preservation\work\redirect_dns.js` was injected with Frida;
+through Steam and `<preservationRoot>\work\redirect_dns.js` was injected with Frida;
 it redirects only the five configured FF7EC API/asset host resolutions and connections to localhost.
 The offline CA was installed in the current user's root store with:
 
 ```powershell
-certutil.exe -user -addstore -f Root E:\FF7EC-Server\certs\ff7ec-offline-ca.cer
+certutil.exe -user -addstore -f Root .\certs\ff7ec-offline-ca.cer
 ```
 
 The regular `Start-Ff7ecOffline.ps1` launcher remains the simpler permanent setup when an

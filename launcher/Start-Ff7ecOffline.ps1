@@ -18,8 +18,8 @@ param(
 $ErrorActionPreference = "Stop"
 $root = Split-Path -Parent $PSScriptRoot
 $serverProject = Join-Path $root "src\Ff7ec.Server"
-$appsettings = Get-Content (Join-Path $serverProject "appsettings.json") -Raw | ConvertFrom-Json
-$certDir = $appsettings.Ff7ec.CertDirectory
+$appsettings = Get-Content -LiteralPath (Join-Path $serverProject "appsettings.json") -Raw | ConvertFrom-Json
+$certDir = [IO.Path]::GetFullPath([IO.Path]::Combine($serverProject, $appsettings.Ff7ec.CertDirectory))
 $hostnames = $appsettings.Ff7ec.Hostnames
 $caCerPath = Join-Path $certDir "ff7ec-offline-ca.cer"
 
@@ -44,9 +44,10 @@ try {
 # 1. Start the replay server in its own visible window (so REPLAY/GAP log lines are
 #    visible while you play), which also generates the CA/leaf certs on first run.
 Write-Host "Starting replay server..."
-$serverProc = Start-Process powershell -ArgumentList @(
-    "-NoExit", "-Command",
-    "Set-Location '$serverProject'; dotnet run --no-launch-profile"
+$serverCommand = "Set-Location -LiteralPath '$($serverProject.Replace("'", "''"))'; dotnet run --no-launch-profile"
+$encodedCommand = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($serverCommand))
+$serverProc = Start-Process powershell.exe -ArgumentList @(
+    "-NoExit", "-EncodedCommand", $encodedCommand
 ) -PassThru
 
 # 2. Wait for the server to bind. Checking only for the certificate is insufficient once
@@ -72,7 +73,7 @@ for ($waited = 0; $waited -lt 60; $waited++) {
     Write-Host "." -NoNewline
 }
 Write-Host ""
-if (-not $serverReady -or -not (Test-Path $caCerPath)) {
+if (-not $serverReady -or -not (Test-Path -LiteralPath $caCerPath)) {
     throw "Replay server did not become ready - check the server window for startup errors."
 }
 
@@ -81,18 +82,18 @@ Write-Host "Requesting elevation to install CA cert + hosts redirect (one UAC pr
 $logPath = Join-Path $env:TEMP "ff7ec-elevated-setup.log"
 $scriptPath = Join-Path $PSScriptRoot "elevated-setup.ps1"
 $hostArg = ($hostnames -join ",")
-Remove-Item $logPath -Force -ErrorAction SilentlyContinue
-Start-Process powershell -Verb RunAs -ArgumentList @(
-    "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $scriptPath,
-    "-CaCerPath", $caCerPath,
+Remove-Item -LiteralPath $logPath -Force -ErrorAction SilentlyContinue
+Start-Process powershell.exe -Verb RunAs -ArgumentList @(
+    "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "`"$scriptPath`"",
+    "-CaCerPath", "`"$caCerPath`"",
     "-HostnamesCsv", $hostArg,
-    "-LogPath", $logPath
+    "-LogPath", "`"$logPath`""
 ) -Wait
 
-if (-not (Test-Path $logPath)) {
+if (-not (Test-Path -LiteralPath $logPath)) {
     throw "Elevated setup produced no log; elevation may have been cancelled."
 }
-$result = Get-Content $logPath
+$result = Get-Content -LiteralPath $logPath
 $result | ForEach-Object { Write-Host "  $_" }
 if ($result -notcontains "SUCCESS") {
     throw "Elevated setup failed - check the log above."

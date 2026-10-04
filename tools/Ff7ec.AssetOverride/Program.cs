@@ -25,7 +25,7 @@ internal static class AssetOverrideProgram
             string command = args[0].ToLowerInvariant();
             string configPath = GetArg(args, "--config") ?? throw new ArgumentException("Missing --config <path>.");
             OverrideConfig config = LoadConfig(configPath);
-            string stateDirectory = Path.GetFullPath(Path.Combine(Path.GetDirectoryName(configPath)!, config.StateDirectory));
+            string stateDirectory = Path.GetFullPath(Path.Combine(Path.GetDirectoryName(Path.GetFullPath(configPath))!, config.StateDirectory));
 
             return command switch
             {
@@ -272,10 +272,17 @@ internal static class AssetOverrideProgram
     private static OverrideConfig LoadConfig(string path)
     {
         string fullPath = Path.GetFullPath(path);
+        string configDirectory = Path.GetDirectoryName(fullPath)!;
         var config = JsonSerializer.Deserialize<OverrideConfig>(File.ReadAllText(fullPath), JsonOptions())
             ?? throw new InvalidDataException($"Invalid override configuration: {fullPath}");
-        config.GameDirectory = Path.GetFullPath(config.GameDirectory);
-        config.SourcePath = Path.GetFullPath(config.SourcePath);
+        string gameDirectory = Environment.ExpandEnvironmentVariables(config.GameDirectory);
+        if (gameDirectory.Contains("%FF7EC_GAME_DIRECTORY%", StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException("Set FF7EC_GAME_DIRECTORY or run launcher\\Set-Ff7ecAssetOverride.ps1 to locate the game.");
+        config.GameDirectory = Path.GetFullPath(gameDirectory, configDirectory);
+        string sourcePath = Environment.ExpandEnvironmentVariables(config.SourcePath);
+        if (sourcePath.Contains("%FF7EC_PRESERVATION_ROOT%", StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException("Set FF7EC_PRESERVATION_ROOT or run launcher\\Set-Ff7ecAssetOverride.ps1 to select a preservation directory.");
+        config.SourcePath = Path.GetFullPath(sourcePath, configDirectory);
         return config;
     }
 

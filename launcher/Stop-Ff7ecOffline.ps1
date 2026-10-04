@@ -24,16 +24,16 @@ $logPath = Join-Path $env:TEMP "ff7ec-elevated-teardown.log"
 $scriptPath = Join-Path $PSScriptRoot "elevated-teardown.ps1"
 
 Write-Host "Requesting elevation to remove hosts redirect..."
-Remove-Item $logPath -Force -ErrorAction SilentlyContinue
-Start-Process powershell -Verb RunAs -ArgumentList @(
-    "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $scriptPath,
-    "-LogPath", $logPath
+Remove-Item -LiteralPath $logPath -Force -ErrorAction SilentlyContinue
+Start-Process powershell.exe -Verb RunAs -ArgumentList @(
+    "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "`"$scriptPath`"",
+    "-LogPath", "`"$logPath`""
 ) -Wait
 
-if (-not (Test-Path $logPath)) {
+if (-not (Test-Path -LiteralPath $logPath)) {
     throw "Elevated teardown produced no log; elevation may have been cancelled."
 }
-$result = Get-Content $logPath
+$result = Get-Content -LiteralPath $logPath
 $result | ForEach-Object { Write-Host "  $_" }
 if ($result -notcontains "SUCCESS") {
     throw "Elevated teardown failed - check the log above."

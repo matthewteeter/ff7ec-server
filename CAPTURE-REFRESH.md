@@ -3,13 +3,20 @@
 Use this procedure while the official FF7EC servers are still available to
 replace the offline server's replay data with the latest state of your account.
 
+Run all commands from the server repository root in each PowerShell window.
+The scripts select a writable preservation root automatically: `E:\FF7EC_Preservation`,
+then `C:\FF7EC_Preservation`, then `%LOCALAPPDATA%\FF7EC_Preservation`.
+Set `FF7EC_PRESERVATION_ROOT` in each window (or your user environment) to pin a
+different location outside the source repository. `<preservationRoot>` below
+means the selected folder; no data is moved from another location automatically.
+
 The capture pipeline stores two forms of data:
 
 - Raw, complete mitmproxy captures under
-  `E:\FF7EC_Preservation\captures\<timestamp>\`. These contain private
+  `<preservationRoot>\captures\<timestamp>\`. These contain private
   account, Steam, device, token, and session data.
 - Replay-ready records with request headers omitted under
-  `E:\FF7EC-Server\captures\`. The C# server loads these files at startup.
+  `.\captures\`. The C# server loads these files at startup.
 
 Importing a new capture is additive. A later response replaces an earlier one
 only when its `(host, method, path+query)` replay key is identical. **Do not
@@ -25,7 +32,7 @@ offline launcher previously changed the Windows hosts file, remove its
 redirects:
 
 ```powershell
-E:\FF7EC-Server\launcher\Stop-Ff7ecOffline.ps1
+.\launcher\Stop-Ff7ecOffline.ps1
 ```
 
 This may request elevation. Do not capture while the ASP.NET replay server is
@@ -39,7 +46,7 @@ This is a one-time script and does not require administrator privileges.
 Only trust a mitmproxy CA that belongs to your own installation:
 
 ```powershell
-& E:\FF7EC-Server\launcher\Trust-Ff7ecCaptureCa.ps1
+& .\launcher\Trust-Ff7ecCaptureCa.ps1
 ```
 
 ## 3. Start a fresh capture
@@ -47,10 +54,10 @@ Only trust a mitmproxy CA that belongs to your own installation:
 In a regular Windows PowerShell window, run this script and leave it open:
 
 ```powershell
-& E:\FF7EC-Server\launcher\Start-Ff7ecLiveCapture.ps1
+& .\launcher\Start-Ff7ecLiveCapture.ps1
 ```
 
-It creates a timestamped directory under `E:\FF7EC_Preservation\captures`,
+It creates a timestamped directory under `<preservationRoot>\captures`,
 backs up the current replay store to `replay-store-before`, sets the staging
 destination **in the mitmdump process**, and starts mitmdump on port 443.
 It prints the full paths to `capture.mitm` and `staged-replay`. No session
@@ -68,7 +75,7 @@ hosts-file block *before* launching the game:
 
 ```powershell
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File `
-  E:\FF7EC-Server\launcher\Set-Ff7ecCaptureRouting.ps1 -Action Enable
+  .\launcher\Set-Ff7ecCaptureRouting.ps1 -Action Enable
 ```
 
 This backs up the original hosts file privately and redirects only the five
@@ -77,7 +84,7 @@ offline server or install its CA. With mitmdump still running, launch the
 game from a third, regular PowerShell window:
 
 ```powershell
-& E:\FF7EC-Server\launcher\Launch-Ff7ecLiveGame.ps1
+& .\launcher\Launch-Ff7ecLiveGame.ps1
 ```
 
 The launch script checks that routing is active and port 443 is listening.
@@ -86,14 +93,14 @@ in the elevated PowerShell window **before** starting offline mode:
 
 ```powershell
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File `
-  E:\FF7EC-Server\launcher\Set-Ff7ecCaptureRouting.ps1 -Action Disable
+  .\launcher\Set-Ff7ecCaptureRouting.ps1 -Action Disable
 ```
 
 **No-admin fallback:** if you cannot approve the hosts-file change, start
 the capture script in step 3, then run this in a second PowerShell window:
 
 ```powershell
-& E:\FF7EC-Server\launcher\Launch-Ff7ecLiveGame.ps1 -UseFrida
+& .\launcher\Launch-Ff7ecLiveGame.ps1 -UseFrida
 ```
 
 Do not use `frida -W FF7EC.exe` on Windows: its spawn-gating mode reports
@@ -155,12 +162,13 @@ live-capture routing has been disabled.
 With mitmdump stopped and live-capture routing disabled, run:
 
 ```powershell
-& E:\FF7EC-Server\launcher\Finish-Ff7ecLiveCapture.ps1
+& .\launcher\Finish-Ff7ecLiveCapture.ps1
 ```
 
 By default it selects the newest session **created by the start script**,
 not an old `$rawCapture` variable. You can explicitly select a session with
-`-SessionDirectory 'E:\FF7EC_Preservation\captures\YYYYMMDD_HHMMSS'`.
+`-SessionDirectory '<preservationRoot>\captures\YYYYMMDD_HHMMSS'`
+(replace `<preservationRoot>` with the actual folder printed by the start script).
 The finish script verifies the raw `.mitm` and that a successful nonempty
 `POST /api/pvt/user/title` response was staged **after this session started**
 before it imports anything. It then verifies that the imported account
@@ -175,8 +183,8 @@ this session. They may provide coverage for screens that were not revisited.
 The replay server may have local offline changes in:
 
 ```text
-E:\FF7EC-Server\data\party-settings.json
-E:\FF7EC-Server\data\story-state.json
+.\data\party-settings.json
+.\data\story-state.json
 ```
 
 Those overlays intentionally take precedence over corresponding values in the
@@ -184,7 +192,7 @@ captured account snapshot. To test exactly what the official server returned,
 move them to a timestamped private backup with:
 
 ```powershell
-& E:\FF7EC-Server\launcher\Backup-Ff7ecLocalState.ps1
+& .\launcher\Backup-Ff7ecLocalState.ps1
 ```
 
 This step is optional. Keep the local files if the offline party, wallpaper,
@@ -198,13 +206,13 @@ Leave `data\asset-overrides` in place.
 Start offline mode and launch the game:
 
 ```powershell
-E:\FF7EC-Server\launcher\Start-Ff7ecOffline.ps1 -LaunchGame
+.\launcher\Start-Ff7ecOffline.ps1 -LaunchGame
 ```
 
 Browse the same screens used during capture and inspect:
 
 ```text
-E:\FF7EC-Server\gaps
+.\gaps
 ```
 
 An empty gaps directory means every request made during that validation run
@@ -216,7 +224,7 @@ exercised during another live capture.
 When validation is complete:
 
 ```powershell
-E:\FF7EC-Server\launcher\Stop-Ff7ecOffline.ps1
+.\launcher\Stop-Ff7ecOffline.ps1
 ```
 
 ## Privacy and source control
@@ -224,7 +232,7 @@ E:\FF7EC-Server\launcher\Stop-Ff7ecOffline.ps1
 Never publish either the raw `.mitm` files or imported replay records. They are
 account-specific and can contain private identifiers, tokens, hashes, and
 encrypted account state. Keep raw captures and rollback snapshots under
-`E:\FF7EC_Preservation`.
+the selected preservation root.
 
 The repository `.gitignore` excludes `captures/`, `data/`, `certs/`, `gaps/`,
 and `*.mitm`. Do not bypass those exclusions with `git add --force`.

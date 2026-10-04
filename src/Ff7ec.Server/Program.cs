@@ -6,12 +6,12 @@ var builder = WebApplication.CreateBuilder(args);
 
 var config = builder.Configuration.GetSection("Ff7ec");
 int listenPort = config.GetValue("ListenPort", 443);
-string capturesDir = config["CapturesDirectory"] ?? throw new InvalidOperationException("Ff7ec:CapturesDirectory not configured");
-string certDir = config["CertDirectory"] ?? throw new InvalidOperationException("Ff7ec:CertDirectory not configured");
-string gapsDir = config["GapsDirectory"] ?? throw new InvalidOperationException("Ff7ec:GapsDirectory not configured");
-string dataDir = config["DataDirectory"] ?? throw new InvalidOperationException("Ff7ec:DataDirectory not configured");
+string capturesDir = Path.GetFullPath(config["CapturesDirectory"] ?? throw new InvalidOperationException("Ff7ec:CapturesDirectory not configured"), builder.Environment.ContentRootPath);
+string certDir = Path.GetFullPath(config["CertDirectory"] ?? throw new InvalidOperationException("Ff7ec:CertDirectory not configured"), builder.Environment.ContentRootPath);
+string gapsDir = Path.GetFullPath(config["GapsDirectory"] ?? throw new InvalidOperationException("Ff7ec:GapsDirectory not configured"), builder.Environment.ContentRootPath);
+string dataDir = Path.GetFullPath(config["DataDirectory"] ?? throw new InvalidOperationException("Ff7ec:DataDirectory not configured"), builder.Environment.ContentRootPath);
 var assetOverrideConfig = config.GetSection("AssetOverride");
-string assetOverrideStateFile = assetOverrideConfig["StateFile"] ?? throw new InvalidOperationException("Ff7ec:AssetOverride:StateFile not configured");
+string assetOverrideStateFile = Path.GetFullPath(assetOverrideConfig["StateFile"] ?? throw new InvalidOperationException("Ff7ec:AssetOverride:StateFile not configured"), builder.Environment.ContentRootPath);
 string assetManifestHost = assetOverrideConfig["ManifestHost"] ?? throw new InvalidOperationException("Ff7ec:AssetOverride:ManifestHost not configured");
 string assetManifestPath = assetOverrideConfig["ManifestPath"] ?? throw new InvalidOperationException("Ff7ec:AssetOverride:ManifestPath not configured");
 string assetDataHost = assetOverrideConfig["AssetHost"] ?? throw new InvalidOperationException("Ff7ec:AssetOverride:AssetHost not configured");

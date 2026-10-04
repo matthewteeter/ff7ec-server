@@ -1,9 +1,9 @@
 {
-  "GameDirectory": "E:\\SteamLibrary\\steamapps\\common\\FF7EC",
+  "GameDirectory": "%FF7EC_GAME_DIRECTORY%",
   "StateDirectory": "..\\data\\asset-overrides\\tifa-019",
   "AssetName": "character/003/model/019.d",
   "ObjectName": "aLrd2t",
-  "SourcePath": "E:\\FF7EC_Preservation\\viewerdata\\bundles\\character\\003\\model\\019.d",
+  "SourcePath": "%FF7EC_PRESERVATION_ROOT%\\viewerdata\\bundles\\character\\003\\model\\019.d",
   "SourceSha256": "da2fa8c8441031e1c2036628baf5e4a800162b1a3a65032c126031f355e0476c",
   "OriginalMd5": "ffeb69bab30bcde2984b24932ca5f381",
   "OriginalSize": 11540992,
