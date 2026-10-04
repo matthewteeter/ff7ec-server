@@ -3,10 +3,10 @@
     Stops FF7EC offline mode: removes the hosts file redirect (single UAC prompt) so this
     machine can reach the real game servers again. Leaves the CA installed and does not
     touch the replay server process - close its window manually when done. By default it
-    also restores any launcher-managed local asset override.
+    also restores launcher-managed local asset overrides in reverse application order.
 
 .PARAMETER KeepAssetOverrides
-    Leave configured local asset overrides applied while disabling offline mode.
+    Leave tracked local asset overrides applied while disabling offline mode.
 #>
 param(
     [switch]$KeepAssetOverrides
@@ -16,7 +16,7 @@ $ErrorActionPreference = "Stop"
 Write-Host "=== FF7EC Offline Server teardown ===" -ForegroundColor Cyan
 
 if (-not $KeepAssetOverrides) {
-    Write-Host "Restoring launcher-managed local asset override..."
+    Write-Host "Restoring launcher-managed local asset overrides..."
     & (Join-Path $PSScriptRoot "Set-Ff7ecAssetOverride.ps1") Restore
 }
 

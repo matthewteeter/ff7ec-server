@@ -6,4 +6,7 @@
   <Folder Name="/tools/">
     <Project Path="tools/Ff7ec.AssetOverride/Ff7ec.AssetOverride.csproj" />
   </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Ff7ec.AssetOverride.Checks/Ff7ec.AssetOverride.Checks.csproj" />
+  </Folder>
 </Solution>

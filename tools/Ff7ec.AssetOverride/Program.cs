@@ -23,23 +23,149 @@ internal static class AssetOverrideProgram
             }
 
             string command = args[0].ToLowerInvariant();
-            string configPath = GetArg(args, "--config") ?? throw new ArgumentException("Missing --config <path>.");
-            OverrideConfig config = LoadConfig(configPath);
-            string stateDirectory = Path.GetFullPath(Path.Combine(Path.GetDirectoryName(Path.GetFullPath(configPath))!, config.StateDirectory));
-
-            return command switch
+            if (command is not ("apply" or "restore" or "status"))
+                throw new ArgumentException($"Unknown command '{command}'.");
+            string? configPath = GetArg(args, "--config");
+            if (configPath is not null)
             {
-                "apply" => Apply(config, stateDirectory),
-                "restore" => Restore(stateDirectory),
-                "status" => Status(config, stateDirectory),
-                _ => throw new ArgumentException($"Unknown command '{command}'.")
-            };
+                if (GetArg(args, "--packages") is not null || GetArg(args, "--state-root") is not null)
+                    throw new ArgumentException("--config cannot be combined with --packages or --state-root.");
+                return RunConfigured(command, configPath, GetArg(args, "--asset"));
+            }
+            string stateRoot = Path.GetFullPath(GetArg(args, "--state-root")
+                ?? throw new ArgumentException("Missing --state-root <path>."));
+            string? packagesRoot = GetArg(args, "--packages");
+            if (command != "restore" && packagesRoot is null)
+                throw new ArgumentException("Missing --packages <path>.");
+            return RunPackages(command, packagesRoot is null ? null : Path.GetFullPath(packagesRoot),
+                stateRoot, GetArg(args, "--game"), GetArg(args, "--asset"));
         }
         catch (Exception ex)
         {
             Console.Error.WriteLine($"ERROR: {ex.Message}");
             return 2;
         }
+    }
+
+    private static int RunConfigured(string command, string configPath, string? assetName)
+    {
+        OverrideConfig[] configs = LoadConfigs(configPath);
+        if (assetName is not null)
+        {
+            configs = configs.Where(config => config.AssetName.Equals(assetName, StringComparison.Ordinal)).ToArray();
+            if (configs.Length == 0) throw new ArgumentException($"Asset '{assetName}' is not configured.");
+        }
+        var newlyApplied = new List<string>();
+        try
+        {
+            foreach (OverrideConfig config in command == "restore" ? configs.Reverse() : configs)
+            {
+                string stateDirectory = Path.GetFullPath(Path.Combine(Path.GetDirectoryName(Path.GetFullPath(configPath))!, config.StateDirectory));
+                if (command == "apply")
+                {
+                    string statePath = Path.Combine(stateDirectory, "state.json");
+                    bool wasApplied = File.Exists(statePath) &&
+                        JsonSerializer.Deserialize<OverrideState>(File.ReadAllText(statePath), JsonOptions())?.Applied == true;
+                    Apply(config, stateDirectory);
+                    if (!wasApplied) newlyApplied.Add(stateDirectory);
+                }
+                else if (command == "restore") Restore(stateDirectory);
+                else Status(config, stateDirectory);
+            }
+        }
+        catch
+        {
+            foreach (string stateDirectory in newlyApplied.AsEnumerable().Reverse())
+            {
+                try { Restore(stateDirectory); }
+                catch (Exception ex) { Console.Error.WriteLine($"ERROR: Asset override rollback failed: {ex.Message}"); }
+            }
+            throw;
+        }
+        return 0;
+    }
+
+    private static int RunPackages(string command, string? packagesRoot, string stateRoot,
+        string? gameDirectory, string? assetName)
+    {
+        StoredOverride[] states = ReadManagedStates(stateRoot);
+        if (command == "restore")
+        {
+            StoredOverride[] selected = states.Where(state => assetName is null || state.State.AssetName == assetName).ToArray();
+            if (assetName is not null && selected.Length == 0)
+                throw new ArgumentException($"Asset '{assetName}' is not tracked.");
+            foreach (StoredOverride state in selected.Where(state => state.State.Applied || state.State.RestoreRequired))
+                Restore(state.Directory);
+            if (!selected.Any(state => state.State.Applied || state.State.RestoreRequired))
+                Console.WriteLine("No applied asset overrides; nothing to restore.");
+            return 0;
+        }
+
+        OverrideConfig[] configs = LoadPackages(packagesRoot!, stateRoot, states);
+        if (assetName is not null)
+        {
+            configs = configs.Where(config => config.AssetName == assetName).ToArray();
+            states = states.Where(state => state.State.AssetName == assetName).ToArray();
+            if (configs.Length == 0 && states.Length == 0)
+                throw new ArgumentException($"Asset '{assetName}' is not installed or tracked.");
+        }
+        if (command == "status")
+        {
+            foreach (OverrideConfig config in configs) Console.WriteLine($"INSTALLED: {config.AssetName}");
+            foreach (StoredOverride state in states)
+            {
+                string status = state.State.RestoreRequired ? "RECOVERY REQUIRED"
+                    : state.State.Applied ? "APPLIED" : "RESTORED";
+                Console.WriteLine($"{status}: {state.State.AssetName}");
+            }
+            if (configs.Length == 0) Console.WriteLine("No installed asset override packages.");
+            return 0;
+        }
+
+        if (configs.Length > 0)
+        {
+            string game = gameDirectory ?? Environment.GetEnvironmentVariable("FF7EC_GAME_DIRECTORY")
+                ?? throw new InvalidOperationException("Set FF7EC_GAME_DIRECTORY or pass --game <game-directory>.");
+            if (string.IsNullOrWhiteSpace(game)) throw new ArgumentException("The game directory must not be empty.");
+            game = Path.GetFullPath(Environment.ExpandEnvironmentVariables(game));
+            foreach (OverrideConfig config in configs)
+            {
+                config.GameDirectory = game;
+                ValidateConfig(config);
+            }
+        }
+
+        var installed = configs.Select(config => config.AssetName).ToHashSet(StringComparer.Ordinal);
+        foreach (StoredOverride state in states.Where(state => state.State.RestoreRequired ||
+                     (state.State.Applied && !installed.Contains(state.State.AssetName))))
+        {
+            Console.WriteLine($"Restoring removed or interrupted override: {state.State.AssetName}");
+            Restore(state.Directory);
+        }
+
+        var newlyApplied = new List<string>();
+        try
+        {
+            foreach (OverrideConfig config in configs)
+            {
+                string directory = config.StateDirectory;
+                bool wasApplied = File.Exists(Path.Combine(directory, "state.json")) &&
+                    ReadState(Path.Combine(directory, "state.json")).Applied;
+                Apply(config, directory);
+                if (!wasApplied) newlyApplied.Add(directory);
+            }
+        }
+        catch
+        {
+            foreach (string directory in newlyApplied.AsEnumerable().Reverse())
+            {
+                try { Restore(directory); }
+                catch (Exception ex) { Console.Error.WriteLine($"ERROR: Asset override rollback failed: {ex.Message}"); }
+            }
+            throw;
+        }
+        if (configs.Length == 0) Console.WriteLine("No installed asset overrides; original assets will be used.");
+        return 0;
     }
 
     private static int Apply(OverrideConfig config, string stateDirectory)
@@ -57,8 +183,21 @@ internal static class AssetOverrideProgram
         Directory.CreateDirectory(stateDirectory);
         string statePath = Path.Combine(stateDirectory, "state.json");
         OverrideState? previous = File.Exists(statePath)
-            ? JsonSerializer.Deserialize<OverrideState>(File.ReadAllText(statePath), JsonOptions())
+            ? ReadState(statePath)
             : null;
+        if (previous?.RestoreRequired == true)
+        {
+            Restore(stateDirectory);
+            previous = ReadState(statePath);
+        }
+        if (previous is not null)
+        {
+            if (previous.AssetName != config.AssetName || previous.ObjectName != config.ObjectName ||
+                (previous.Applied && previous.ReplacementCrc != config.ReplacementCrc) ||
+                !previous.GameDirectory.Equals(config.GameDirectory, StringComparison.OrdinalIgnoreCase))
+                throw new InvalidDataException($"Override settings changed for {config.AssetName}; restore it before reapplying.");
+            RequireOriginalMetadata(ReadItem(DecryptSecureFile(File.ReadAllBytes(previous.ManifestBackupPath)), config.AssetName), config);
+        }
         if (previous?.Applied == true)
         {
             VerifyAppliedFiles(previous, sourceSha256, verifyActiveManifest: false);
@@ -70,8 +209,11 @@ internal static class AssetOverrideProgram
         string currentManifestSha256 = Hex(SHA256.HashData(manifestFile));
         if (previous is not null &&
             !currentManifestSha256.Equals(previous.OriginalManifestSha256, StringComparison.OrdinalIgnoreCase) &&
-            !currentManifestSha256.Equals(previous.PatchedManifestSha256, StringComparison.OrdinalIgnoreCase))
+            !currentManifestSha256.Equals(previous.PatchedManifestSha256, StringComparison.OrdinalIgnoreCase) &&
+            ReadItem(DecryptSecureFile(manifestFile), config.AssetName).Md5 != config.OriginalMd5)
         {
+            if (previous.ReplacementCrc != config.ReplacementCrc)
+                throw new InvalidDataException($"Override CRC changed for {config.AssetName}; original manifest metadata is required to rebuild it.");
             VerifyAppliedFiles(previous, sourceSha256, verifyActiveManifest: false);
             previous.Applied = true;
             previous.AppliedAtUtc = DateTimeOffset.UtcNow;
@@ -127,6 +269,7 @@ internal static class AssetOverrideProgram
         string bucketMetaBackup = Path.Combine(stateDirectory, "bucket.meta.original");
         bool canReuseBackups = previous is not null &&
             originalManifestSha256.Equals(previous.OriginalManifestSha256, StringComparison.OrdinalIgnoreCase) &&
+            previous.BucketMetaSha256.Equals(Hex(SHA256.HashData(expectedBucketMeta)), StringComparison.OrdinalIgnoreCase) &&
             File.Exists(manifestBackup) && File.Exists(blobBackup) && File.Exists(bucketMetaBackup);
         if (canReuseBackups)
         {
@@ -144,6 +287,7 @@ internal static class AssetOverrideProgram
         var state = new OverrideState
         {
             Applied = false,
+            RestoreRequired = true,
             AssetName = config.AssetName,
             ObjectName = config.ObjectName,
             GameDirectory = config.GameDirectory,
@@ -152,6 +296,9 @@ internal static class AssetOverrideProgram
             ManifestPath = manifestPath,
             ManifestBackupPath = manifestBackup,
             OriginalManifestSha256 = originalManifestSha256,
+            OriginalMd5 = current.Md5,
+            OriginalSize = current.Size,
+            OriginalCrc = current.Crc,
             PatchedManifestSha256 = patchedManifestSha256,
             PatchedManifestPayloadSha256 = Hex(SHA256.HashData(patchedPayload)),
             OriginalBlobPath = originalBlobPath,
@@ -177,16 +324,14 @@ internal static class AssetOverrideProgram
                 File.Delete(originalBlobPath);
             WriteBytesAtomic(manifestPath, patchedManifest);
             state.Applied = true;
+            state.RestoreRequired = false;
             state.AppliedAtUtc = DateTimeOffset.UtcNow;
             WriteJsonAtomic(statePath, state);
         }
         catch
         {
-            WriteBytesAtomic(bucketMetaPath, File.ReadAllBytes(bucketMetaBackup));
-            WriteBytesAtomic(originalBlobPath, File.ReadAllBytes(blobBackup));
-            WriteBytesAtomic(manifestPath, File.ReadAllBytes(manifestBackup));
-            if (!replacementBlobPath.Equals(originalBlobPath, StringComparison.OrdinalIgnoreCase) && File.Exists(replacementBlobPath))
-                File.Delete(replacementBlobPath);
+            try { Restore(stateDirectory); }
+            catch (Exception ex) { Console.Error.WriteLine($"ERROR: Asset override rollback failed; recovery state retained: {ex.Message}"); }
             throw;
         }
 
@@ -208,43 +353,59 @@ internal static class AssetOverrideProgram
             return 0;
         }
 
-        OverrideState state = JsonSerializer.Deserialize<OverrideState>(File.ReadAllText(statePath), JsonOptions())
-            ?? throw new InvalidDataException($"Invalid override state: {statePath}");
+        OverrideState state = ReadState(statePath);
         EnsureHash(state.ManifestBackupPath, state.OriginalManifestSha256, "Manifest backup");
         EnsureHash(state.OriginalBlobBackupPath, Path.GetFileName(state.OriginalBlobPath), "Asset backup", MD5.Create());
         EnsureHash(state.BucketMetaBackupPath, state.BucketMetaSha256, "Bucket metadata backup");
 
-        string activeManifestHash = Hex(SHA256.HashData(File.ReadAllBytes(state.ManifestPath)));
+        byte[] activeManifest = File.ReadAllBytes(state.ManifestPath);
+        string activeManifestHash = Hex(SHA256.HashData(activeManifest));
         bool manifestIsOriginal = activeManifestHash.Equals(state.OriginalManifestSha256, StringComparison.OrdinalIgnoreCase);
         bool manifestIsPatched = activeManifestHash.Equals(state.PatchedManifestSha256, StringComparison.OrdinalIgnoreCase);
+        byte[]? restoredManifest = null;
+        bool preserveManifest = false;
+        bool preserveBucket = false;
         if (!manifestIsOriginal && !manifestIsPatched)
         {
-            state.Applied = false;
-            state.RestoredAtUtc = DateTimeOffset.UtcNow;
-            WriteJsonAtomic(statePath, state);
-            Console.WriteLine($"Disabled server-only override: {state.AssetName}");
-            Console.WriteLine("  The game-managed manifest was left untouched.");
-            return 0;
+            byte[] currentPayload = DecryptSecureFile(activeManifest);
+            ItemMetadata current = ReadItem(currentPayload, state.AssetName);
+            if (current.Md5.Equals(state.ReplacementMd5, StringComparison.OrdinalIgnoreCase) &&
+                current.Size == state.ReplacementSize && current.Crc == state.ReplacementCrc)
+            {
+                ItemMetadata original = ReadItem(DecryptSecureFile(File.ReadAllBytes(state.ManifestBackupPath)), state.AssetName);
+                restoredManifest = EncryptSecureFile(PatchItem(currentPayload, state.AssetName, original.Size, original.Crc, original.Md5));
+            }
+            else
+            {
+                preserveManifest = true;
+                ItemMetadata original = ReadItem(DecryptSecureFile(File.ReadAllBytes(state.ManifestBackupPath)), state.AssetName);
+                preserveBucket = current.Md5 != original.Md5 || current.Size != original.Size || current.Crc != original.Crc;
+            }
         }
 
+        state.RestoreRequired = true;
+        WriteJsonAtomic(statePath, state);
         bool originalBlobValid = File.Exists(state.OriginalBlobPath);
         if (originalBlobValid)
         {
             try { EnsureHash(state.OriginalBlobPath, Path.GetFileName(state.OriginalBlobPath), "Original cache blob", MD5.Create()); }
             catch (InvalidDataException) { originalBlobValid = false; }
         }
-        WriteBytesAtomic(state.BucketMetaPath, File.ReadAllBytes(state.BucketMetaBackupPath));
+        if (!preserveBucket)
+            WriteBytesAtomic(state.BucketMetaPath, File.ReadAllBytes(state.BucketMetaBackupPath));
         if (!originalBlobValid)
             WriteBytesAtomic(state.OriginalBlobPath, File.ReadAllBytes(state.OriginalBlobBackupPath));
 
-        if (!manifestIsOriginal)
-            WriteBytesAtomic(state.ManifestPath, File.ReadAllBytes(state.ManifestBackupPath));
+        if (!manifestIsOriginal && !preserveManifest)
+            WriteBytesAtomic(state.ManifestPath, restoredManifest ?? File.ReadAllBytes(state.ManifestBackupPath));
         if (!state.ReplacementBlobPath.Equals(state.OriginalBlobPath, StringComparison.OrdinalIgnoreCase) && File.Exists(state.ReplacementBlobPath))
             File.Delete(state.ReplacementBlobPath);
 
         state.Applied = false;
+        state.RestoreRequired = false;
         state.RestoredAtUtc = DateTimeOffset.UtcNow;
         WriteJsonAtomic(statePath, state);
+        if (preserveManifest) Console.WriteLine("  The game-managed manifest was left untouched; original cache bytes were restored.");
         Console.WriteLine(manifestIsOriginal
             ? $"Asset override is already restored: {state.AssetName}"
             : $"Restored original asset and manifest: {state.AssetName}");
@@ -269,38 +430,135 @@ internal static class AssetOverrideProgram
         return 0;
     }
 
-    private static OverrideConfig LoadConfig(string path)
+    private static OverrideConfig[] LoadConfigs(string path)
     {
         string fullPath = Path.GetFullPath(path);
         string configDirectory = Path.GetDirectoryName(fullPath)!;
-        var config = JsonSerializer.Deserialize<OverrideConfig>(File.ReadAllText(fullPath), JsonOptions())
-            ?? throw new InvalidDataException($"Invalid override configuration: {fullPath}");
-        string gameDirectory = Environment.ExpandEnvironmentVariables(config.GameDirectory);
-        if (gameDirectory.Contains("%FF7EC_GAME_DIRECTORY%", StringComparison.OrdinalIgnoreCase))
-            throw new InvalidOperationException("Set FF7EC_GAME_DIRECTORY or run launcher\\Set-Ff7ecAssetOverride.ps1 to locate the game.");
-        config.GameDirectory = Path.GetFullPath(gameDirectory, configDirectory);
-        string sourcePath = Environment.ExpandEnvironmentVariables(config.SourcePath);
-        if (sourcePath.Contains("%FF7EC_PRESERVATION_ROOT%", StringComparison.OrdinalIgnoreCase))
-            throw new InvalidOperationException("Set FF7EC_PRESERVATION_ROOT or run launcher\\Set-Ff7ecAssetOverride.ps1 to select a preservation directory.");
-        config.SourcePath = Path.GetFullPath(sourcePath, configDirectory);
-        return config;
+        using JsonDocument document = JsonDocument.Parse(File.ReadAllText(fullPath));
+        OverrideConfig[] configs = document.RootElement.ValueKind == JsonValueKind.Array
+            ? document.RootElement.Deserialize<OverrideConfig[]>(JsonOptions()) ?? []
+            : [document.RootElement.Deserialize<OverrideConfig>(JsonOptions())
+                ?? throw new InvalidDataException($"Invalid override configuration: {fullPath}")];
+        if (configs.Select(config => config.AssetName).Distinct(StringComparer.Ordinal).Count() != configs.Length)
+            throw new InvalidDataException("Override configuration must contain unique, nonempty asset entries.");
+        foreach (OverrideConfig config in configs)
+        {
+            string gameDirectory = Environment.ExpandEnvironmentVariables(config.GameDirectory);
+            if (gameDirectory.Contains("%FF7EC_GAME_DIRECTORY%", StringComparison.OrdinalIgnoreCase))
+                throw new InvalidOperationException("Set FF7EC_GAME_DIRECTORY or run launcher\\Set-Ff7ecAssetOverride.ps1 to locate the game.");
+            config.GameDirectory = Path.GetFullPath(gameDirectory, configDirectory);
+            string sourcePath = Environment.ExpandEnvironmentVariables(config.SourcePath);
+            if (sourcePath.Contains("%FF7EC_PRESERVATION_ROOT%", StringComparison.OrdinalIgnoreCase))
+                throw new InvalidOperationException("Set FF7EC_PRESERVATION_ROOT or run launcher\\Set-Ff7ecAssetOverride.ps1 to select a preservation directory.");
+            config.SourcePath = Path.GetFullPath(sourcePath, configDirectory);
+        }
+        if (configs.Select(config => Path.GetFullPath(Path.Combine(Path.GetDirectoryName(fullPath)!, config.StateDirectory)))
+            .Distinct(StringComparer.OrdinalIgnoreCase).Count() != configs.Length)
+            throw new InvalidDataException("Each asset override must use a separate state directory.");
+        return configs;
     }
+
+    private static OverrideConfig[] LoadPackages(string packagesRoot, string stateRoot, StoredOverride[] states)
+    {
+        if (IsWithin(stateRoot, packagesRoot) || IsWithin(packagesRoot, stateRoot))
+            throw new ArgumentException("Package and recovery-state directories must be separate, non-nested folders.");
+        if (File.Exists(packagesRoot)) throw new IOException($"Package root is not a directory: {packagesRoot}");
+        string[] directories;
+        try { directories = Directory.GetDirectories(packagesRoot); }
+        catch (DirectoryNotFoundException) { return []; }
+        if (Directory.EnumerateFiles(packagesRoot).Any())
+            throw new InvalidDataException($"Put each override in its own package folder, not loose files in {packagesRoot}.");
+        var configs = new List<OverrideConfig>();
+        foreach (string directory in directories.Order(StringComparer.Ordinal))
+        {
+            string manifest = Path.Combine(directory, "override.json");
+            using JsonDocument document = JsonDocument.Parse(File.ReadAllText(manifest));
+            if (document.RootElement.ValueKind != JsonValueKind.Object)
+                throw new InvalidDataException($"Package manifest must be an object: {manifest}");
+            var fields = document.RootElement.EnumerateObject().Select(property => property.Name)
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+            if (!new[] { "AssetName", "ObjectName", "SourceSha256", "OriginalMd5", "OriginalSize",
+                    "OriginalCrc", "OriginalBucketMetaHex", "ReplacementCrc" }.All(fields.Contains))
+                throw new InvalidDataException($"Package manifest is missing required asset metadata: {manifest}");
+            if (document.RootElement.EnumerateObject().Any(property =>
+                    property.Name.Equals("GameDirectory", StringComparison.OrdinalIgnoreCase) ||
+                    property.Name.Equals("StateDirectory", StringComparison.OrdinalIgnoreCase)))
+                throw new InvalidDataException($"Package manifests must not set GameDirectory or StateDirectory: {manifest}");
+            OverrideConfig config = document.RootElement.Deserialize<OverrideConfig>(JsonOptions())
+                ?? throw new InvalidDataException($"Invalid package manifest: {manifest}");
+            if (string.IsNullOrWhiteSpace(config.SourcePath) || Path.IsPathRooted(config.SourcePath))
+                throw new InvalidDataException($"Package SourcePath must be relative: {manifest}");
+            config.SourcePath = Path.GetFullPath(config.SourcePath, directory);
+            if (!IsWithin(config.SourcePath, directory))
+                throw new InvalidDataException($"Package source must stay inside its package folder: {manifest}");
+            ValidateMetadata(config);
+            byte[] source = File.ReadAllBytes(config.SourcePath);
+            EnsureUnityBundle(source, config.SourcePath);
+            if (!Hex(SHA256.HashData(source)).Equals(config.SourceSha256, StringComparison.OrdinalIgnoreCase))
+                throw new InvalidDataException($"Replacement SHA-256 mismatch for {config.AssetName}: {config.SourcePath}");
+            config.StateDirectory = states.SingleOrDefault(state => state.State.AssetName == config.AssetName)?.Directory
+                ?? Path.Combine(stateRoot, Hex(SHA256.HashData(Encoding.UTF8.GetBytes(config.AssetName))));
+            configs.Add(config);
+        }
+        if (configs.Select(config => config.AssetName).Distinct(StringComparer.Ordinal).Count() != configs.Count ||
+            configs.Select(config => config.ObjectName).Distinct(StringComparer.Ordinal).Count() != configs.Count)
+            throw new InvalidDataException("Installed packages must target unique assets and object names.");
+        return configs.ToArray();
+    }
+
+    private static bool IsWithin(string path, string root)
+    {
+        root = root.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        return path.Equals(root, StringComparison.OrdinalIgnoreCase) ||
+            path.StartsWith(root + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static StoredOverride[] ReadManagedStates(string stateRoot)
+    {
+        if (File.Exists(stateRoot)) throw new IOException($"Recovery-state root is not a directory: {stateRoot}");
+        string[] directories;
+        try { directories = Directory.GetDirectories(stateRoot); }
+        catch (DirectoryNotFoundException) { return []; }
+        StoredOverride[] states = directories.Select(directory => (Directory: directory, Path: Path.Combine(directory, "state.json")))
+            .Where(entry => File.Exists(entry.Path))
+            .Select(entry => new StoredOverride(entry.Directory, ReadState(entry.Path)))
+            .OrderByDescending(entry => entry.State.AppliedAtUtc)
+            .ThenBy(entry => entry.Directory, StringComparer.Ordinal).ToArray();
+        if (states.Any(entry => string.IsNullOrWhiteSpace(entry.State.AssetName)) ||
+            states.Select(entry => entry.State.AssetName).Distinct(StringComparer.Ordinal).Count() != states.Length)
+            throw new InvalidDataException("Recovery states must contain unique, nonempty asset names.");
+        return states;
+    }
+
+    private static OverrideState ReadState(string path) =>
+        JsonSerializer.Deserialize<OverrideState>(File.ReadAllText(path), JsonOptions())
+        ?? throw new InvalidDataException($"Invalid override state: {path}");
 
     private static void ValidateConfig(OverrideConfig config)
     {
         if (!Directory.Exists(config.GameDirectory)) throw new DirectoryNotFoundException($"Game directory not found: {config.GameDirectory}");
         if (!File.Exists(config.SourcePath)) throw new FileNotFoundException("Replacement bundle not found.", config.SourcePath);
+        ValidateMetadata(config);
+    }
+
+    private static void ValidateMetadata(OverrideConfig config)
+    {
         if (string.IsNullOrWhiteSpace(config.AssetName)) throw new InvalidDataException("AssetName is required.");
         if (string.IsNullOrWhiteSpace(config.ObjectName)) throw new InvalidDataException("ObjectName is required.");
-        if (config.OriginalMd5.Length != 32) throw new InvalidDataException("OriginalMd5 must contain 32 hexadecimal characters.");
-        if (config.SourceSha256.Length != 64) throw new InvalidDataException("SourceSha256 must contain 64 hexadecimal characters.");
-        if (config.OriginalBucketMetaHex.Length != 16) throw new InvalidDataException("OriginalBucketMetaHex must contain 16 hexadecimal characters.");
+        if (config.AssetName.Any(char.IsControl) || config.ObjectName.Any(char.IsControl))
+            throw new InvalidDataException("AssetName and ObjectName must not contain control characters.");
+        if (config.OriginalSize <= 0) throw new InvalidDataException("OriginalSize must be positive.");
+        if (!IsHex(config.OriginalMd5, 32)) throw new InvalidDataException("OriginalMd5 must contain 32 hexadecimal characters.");
+        if (!IsHex(config.SourceSha256, 64)) throw new InvalidDataException("SourceSha256 must contain 64 hexadecimal characters.");
+        if (!IsHex(config.OriginalBucketMetaHex, 16)) throw new InvalidDataException("OriginalBucketMetaHex must contain 16 hexadecimal characters.");
     }
+
+    private static bool IsHex(string? value, int length) => value is not null && value.Length == length && value.All(Uri.IsHexDigit);
 
     private static void RequireOriginalMetadata(ItemMetadata item, OverrideConfig config)
     {
         if (!item.Md5.Equals(config.OriginalMd5, StringComparison.OrdinalIgnoreCase) ||
-            item.Size != config.OriginalSize || item.Crc != config.OriginalCrc)
+            item.Size != config.OriginalSize || item.Crc != config.OriginalCrc || item.ObjectName != config.ObjectName)
             throw new InvalidDataException($"Manifest metadata differs from the registered original for {config.AssetName}. " +
                 $"Found md5={item.Md5}, size={item.Size}, crc={item.Crc}.");
     }
@@ -438,7 +696,7 @@ internal static class AssetOverrideProgram
 
     private static ItemMetadata ReadItemMetadata(ReadOnlySpan<byte> item)
     {
-        string name = "", md5 = "";
+        string name = "", md5 = "", objectName = "";
         int size = 0;
         uint crc = 0;
         int offset = 0;
@@ -452,10 +710,11 @@ internal static class AssetOverrideProgram
                 case 4 when wire == 0: size = checked((int)ReadVarint(item, ref offset)); break;
                 case 5 when wire == 0: crc = checked((uint)ReadVarint(item, ref offset)); break;
                 case 10 when wire == 2: md5 = Encoding.ASCII.GetString(ReadLengthDelimited(item, ref offset)); break;
+                case 11 when wire == 2: objectName = Encoding.UTF8.GetString(ReadLengthDelimited(item, ref offset)); break;
                 default: SkipField(item, ref offset, wire); break;
             }
         }
-        return new ItemMetadata(name, size, crc, md5);
+        return new ItemMetadata(name, size, crc, md5, objectName);
     }
 
     private static byte[] PatchItem(ReadOnlySpan<byte> database, string assetName, int size, uint crc, string md5)
@@ -597,10 +856,15 @@ internal static class AssetOverrideProgram
     private static string? GetArg(string[] args, string name)
     {
         int index = Array.FindIndex(args, value => value.Equals(name, StringComparison.OrdinalIgnoreCase));
+        if (index >= 0 && (index + 1 >= args.Length || args[index + 1].StartsWith("--", StringComparison.Ordinal)))
+            throw new ArgumentException($"Missing value for {name}.");
         return index >= 0 && index + 1 < args.Length ? args[index + 1] : null;
     }
 
-    private static void Usage() => Console.WriteLine("Usage: Ff7ec.AssetOverride <apply|restore|status> --config <asset-overrides.json>");
+    private static void Usage() => Console.WriteLine(
+        "Usage: Ff7ec.AssetOverride <apply|status> --packages <folder> --state-root <folder> [--game <folder>] [--asset <name>]\n" +
+        "       Ff7ec.AssetOverride restore --state-root <folder> [--asset <name>]\n" +
+        "       Ff7ec.AssetOverride <apply|restore|status> --config <legacy-config.json> [--asset <name>]");
 
     private sealed class OverrideConfig
     {
@@ -608,7 +872,7 @@ internal static class AssetOverrideProgram
         public string StateDirectory { get; set; } = "..\\data\\asset-overrides\\tifa-019";
         public string AssetName { get; set; } = "";
         public string ObjectName { get; set; } = "";
-        public string SourcePath { get; set; } = "";
+        public string SourcePath { get; set; } = "replacement.d";
         public string SourceSha256 { get; set; } = "";
         public string OriginalMd5 { get; set; } = "";
         public int OriginalSize { get; set; }
@@ -620,6 +884,7 @@ internal static class AssetOverrideProgram
     private sealed class OverrideState
     {
         public bool Applied { get; set; }
+        public bool RestoreRequired { get; set; }
         public string AssetName { get; set; } = "";
         public string ObjectName { get; set; } = "";
         public string GameDirectory { get; set; } = "";
@@ -628,6 +893,9 @@ internal static class AssetOverrideProgram
         public string ManifestPath { get; set; } = "";
         public string ManifestBackupPath { get; set; } = "";
         public string OriginalManifestSha256 { get; set; } = "";
+        public string OriginalMd5 { get; set; } = "";
+        public int OriginalSize { get; set; }
+        public uint OriginalCrc { get; set; }
         public string PatchedManifestSha256 { get; set; } = "";
         public string PatchedManifestPayloadSha256 { get; set; } = "";
         public string OriginalBlobPath { get; set; } = "";
@@ -645,5 +913,6 @@ internal static class AssetOverrideProgram
         public DateTimeOffset? RestoredAtUtc { get; set; }
     }
 
-    private readonly record struct ItemMetadata(string Name, int Size, uint Crc, string Md5);
+    private sealed record StoredOverride(string Directory, OverrideState State);
+    private readonly record struct ItemMetadata(string Name, int Size, uint Crc, string Md5, string ObjectName);
 }

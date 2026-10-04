@@ -8,7 +8,7 @@
     Also start FF7EC through Steam once offline mode is active.
 
 .PARAMETER SkipAssetOverrides
-    Start offline mode without applying the configured local asset override.
+    Restore any tracked overrides and start offline mode using original assets.
 #>
 param(
     [switch]$LaunchGame,
@@ -26,19 +26,24 @@ $caCerPath = Join-Path $certDir "ff7ec-offline-ca.cer"
 Write-Host "=== FF7EC Offline Server launcher ===" -ForegroundColor Cyan
 
 $overrideManager = Join-Path $PSScriptRoot "Set-Ff7ecAssetOverride.ps1"
-$restoreOverrideOnFailure = $false
+$newlyAppliedOverrides = [System.Collections.Generic.List[string]]::new()
 try {
     if (-not $SkipAssetOverrides) {
-        $status = & $overrideManager Status
-        $wasAlreadyApplied = @($status)[0] -like "APPLIED:*"
+        $status = @(& $overrideManager Status)
+        $previouslyApplied = @($status | Where-Object { $_ -like "APPLIED:*" } |
+            ForEach-Object { $_.Substring("APPLIED: ".Length) })
         $status | ForEach-Object { Write-Host "  $_" }
-        if ($wasAlreadyApplied) {
-            Write-Host "Configured local asset override is already applied; skipping."
-        } else {
-            Write-Host "Applying configured local asset override..."
-            & $overrideManager Apply
-            $restoreOverrideOnFailure = $true
+        & $overrideManager Apply | ForEach-Object {
+            Write-Host $_
+            if ($_ -cmatch "^(?:Applied override|Applied server-only override|Asset override is already applied): (.+)$") {
+                $asset = $Matches[1]
+                if ($previouslyApplied -cnotcontains $asset -and -not $newlyAppliedOverrides.Contains($asset)) {
+                    $newlyAppliedOverrides.Add($asset)
+                }
+            }
         }
+    } else {
+        & $overrideManager Restore
     }
 
 # 1. Start the replay server in its own visible window (so REPLAY/GAP log lines are
@@ -116,9 +121,12 @@ if ($LaunchGame) {
 }
 }
 catch {
-    if ($restoreOverrideOnFailure) {
-        Write-Warning "Offline startup failed; restoring the asset override applied by this launch."
-        try { & $overrideManager Restore } catch { Write-Warning "Automatic asset restoration also failed: $_" }
+    if ($newlyAppliedOverrides.Count -gt 0) {
+        Write-Warning "Offline startup failed; restoring only the asset overrides applied by this launch."
+        for ($i = $newlyAppliedOverrides.Count - 1; $i -ge 0; $i--) {
+            try { & $overrideManager Restore -AssetName $newlyAppliedOverrides[$i] }
+            catch { Write-Warning "Automatic asset restoration also failed: $_" }
+        }
     }
     throw
 }

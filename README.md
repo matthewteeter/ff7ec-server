@@ -154,48 +154,103 @@ Removes the hosts redirect (one more elevation prompt) so the machine can reach 
 servers again - useful while both this tool and the real servers still exist. The CA is
 left installed (harmless) and the server window must be closed manually.
 
-### Tifa 019 local asset override
+### Optional costume override packages
 
-The launcher is configured to replace `character/003/model/019.d` with the finished local
-bundle at:
+Overrides are opt-in. A missing or empty `<preservationRoot>\asset-overrides`
+folder starts offline mode with original assets, without looking up Steam or
+requiring replacement bundles. There is no mandatory Tifa/Yuffie configuration.
+Keep packages outside this repository; no game assets are shipped with the source.
+
+Install each package as a separate immediate subfolder:
 
 ```text
-<preservationRoot>\viewerdata\bundles\character\003\model\019.d
+<preservationRoot>\asset-overrides\
+  tifa-019\
+    override.json
+    replacement.d
+  yuffie-008\
+    override.json
+    replacement.d
 ```
 
-The launcher expands `%FF7EC_PRESERVATION_ROOT%` in the configured source paths.
-It discovers FF7EC in Steam's registered libraries; set `FF7EC_GAME_DIRECTORY`
-to override that discovery. Custom absolute paths in the JSON remain supported;
-relative game and source paths are resolved against the configuration file's folder.
-When invoking the asset-override .NET tool directly, set both environment variables
-first. Use the same preservation root as the costume viewer; existing data is not
-copied or moved automatically.
+Each `override.json` describes one original manifest entry and its replacement.
+For example, this template needs real values from your own original manifest,
+cache bucket `.meta` file, and replacement bundle before it can be installed:
 
-`Start-Ff7ecOffline.ps1` applies this override before starting the server. The override tool:
+```json
+{
+  "AssetName": "character/003/model/019.d",
+  "ObjectName": "<original manifest objectName>",
+  "SourcePath": "replacement.d",
+  "SourceSha256": "<64 hexadecimal characters>",
+  "OriginalMd5": "<32 hexadecimal characters>",
+  "OriginalSize": 0,
+  "OriginalCrc": 0,
+  "OriginalBucketMetaHex": "<16 hexadecimal characters>",
+  "ReplacementCrc": 0
+}
+```
 
-- refuses to run while `FF7EC.exe` is open;
-- verifies the source bundle's registered SHA-256;
-- wraps the plaintext UnityFS bundle using FF7EC's Octo XOR format;
-- preserves the asset's identity, object name, dependencies, and generation;
-- updates only its local manifest size, Unity CRC, and MD5 fields;
-- keeps the original manifest, bucket metadata, and cache blob under `data\asset-overrides\tifa-019`;
-- makes the replay server return the patched full manifest and serve the replacement bundle
-  from the original asset host if the client needs to download it again.
+`OriginalSize` must be positive. CRC values are the Unity uncompressed-content
+checksums, not a CRC of the stored encrypted/compressed file. `SourcePath` defaults
+to `replacement.d` and must stay inside its package folder. Do not put machine-specific
+`GameDirectory` or `StateDirectory` fields in a package. Missing files, invalid
+metadata, duplicate asset/object names, and hash mismatches are reported as errors,
+not silently skipped.
 
-`Stop-Ff7ecOffline.ps1` restores the originals before removing the hosts redirect. Manual
-control and status checks are also available:
+The launcher discovers FF7EC in Steam's registered libraries only when applying
+installed packages. Set `FF7EC_GAME_DIRECTORY` to override discovery. Set
+`FF7EC_PRESERVATION_ROOT` in each launcher window to choose private preservation storage,
+or pass `-PackageRoot` to the override manager for a different package folder.
+
+Before startup, the tool restores removed packages, recovers interrupted writes,
+and applies installed packages while the game is closed. It verifies the source
+SHA-256 and original asset metadata, wraps replacements with Octo XOR encryption,
+and changes only size, CRC, and MD5 in the manifest. The server composes all active
+overrides into one manifest and serves verified copies of their bundles.
+
+Recovery state, original-file backups, and served copies are kept separately under
+`data\asset-overrides\<asset-key>`. The key is derived from the logical asset name;
+renaming a package folder does not lose its state. Existing `tifa-019`/`yuffie-008`
+recovery folders are reused by asset name. Removing a package is safe: the next
+Apply/startup restores it from this state without needing the removed bundle or a
+Steam lookup when no packages remain. **Do not delete recovery state or backups.**
 
 ```powershell
 .\launcher\Set-Ff7ecAssetOverride.ps1 Status
 .\launcher\Set-Ff7ecAssetOverride.ps1 Apply
 .\launcher\Set-Ff7ecAssetOverride.ps1 Restore
+.\launcher\Set-Ff7ecAssetOverride.ps1 Restore -AssetName "character/003/model/019.d"
 ```
 
-Use `Start-Ff7ecOffline.ps1 -SkipAssetOverrides` to launch without applying it, or
-`Stop-Ff7ecOffline.ps1 -KeepAssetOverrides` to leave it installed. Configuration and the
-registered hashes are in `launcher\asset-overrides.json`. If the model is edited again, its
-SHA-256 and Unity AssetBundle CRC must be re-measured before changing that file; this prevents
-an unverified bundle from being installed into the client cache.
+Restore works even when a package is missing or malformed. To disable a package
+persistently, move its entire folder outside the package root, then run Apply while
+the game is closed. Restore alone is temporary: an installed package is reapplied
+on the next normal startup. Restore before updating an already-applied package.
+`-SkipAssetOverrides` restores tracked overrides and starts with original assets;
+`-KeepAssetOverrides` on teardown leaves them applied. Failed startup restores only
+overrides newly applied by that launch.
+
+The server and launcher share `Ff7ec:AssetOverride:StateDirectory` in
+`appsettings.json`. The server still accepts legacy `StateFile`/`StateFiles` references.
+Explicit legacy JSON configurations remain supported with `-ConfigPath`; they are
+not discovered or required by default. Direct tool usage is:
+
+```powershell
+dotnet run --project .\tools\Ff7ec.AssetOverride -- status `
+  --packages '<preservationRoot>\asset-overrides' --state-root '.\data\asset-overrides'
+dotnet run --project .\tools\Ff7ec.AssetOverride -- restore --state-root '.\data\asset-overrides'
+```
+
+Replace `<preservationRoot>` with the actual private folder. For direct Apply, also
+set `FF7EC_GAME_DIRECTORY` or pass `--game '<game-directory>'`.
+
+Synthetic regression checks (including safe launcher mocks for PowerShell 7 and
+Windows PowerShell 5.1) run without changing real game files, hosts, or certificates:
+
+```powershell
+dotnet run --project .\tests\Ff7ec.AssetOverride.Checks
+```
 
 **Manual:**
 ```powershell

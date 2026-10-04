@@ -236,6 +236,9 @@ or story selections should continue overriding the newly captured values.
 These files do not explain stale crystals or costume ownership; for those,
 verify the timestamp of the captured title response in step 6.
 Leave `data\asset-overrides` in place.
+Those recovery backups are independent of optional packages in
+`<preservationRoot>\asset-overrides`. Removing a package restores it on the next
+Apply/offline startup; deleting its recovery backups prevents safe restoration.
 
 ## 8. Validate offline replay
 

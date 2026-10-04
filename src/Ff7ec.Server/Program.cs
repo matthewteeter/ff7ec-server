@@ -11,7 +11,11 @@ string certDir = Path.GetFullPath(config["CertDirectory"] ?? throw new InvalidOp
 string gapsDir = Path.GetFullPath(config["GapsDirectory"] ?? throw new InvalidOperationException("Ff7ec:GapsDirectory not configured"), builder.Environment.ContentRootPath);
 string dataDir = Path.GetFullPath(config["DataDirectory"] ?? throw new InvalidOperationException("Ff7ec:DataDirectory not configured"), builder.Environment.ContentRootPath);
 var assetOverrideConfig = config.GetSection("AssetOverride");
-string assetOverrideStateFile = Path.GetFullPath(assetOverrideConfig["StateFile"] ?? throw new InvalidOperationException("Ff7ec:AssetOverride:StateFile not configured"), builder.Environment.ContentRootPath);
+string assetOverrideStateDirectory = Path.GetFullPath(
+    assetOverrideConfig["StateDirectory"] ?? Path.Combine(dataDir, "asset-overrides"), builder.Environment.ContentRootPath);
+string[] assetOverrideStateFiles = assetOverrideConfig.GetSection("StateFiles").Get<string[]>()
+    ?? (assetOverrideConfig["StateFile"] is string stateFile ? [stateFile] : []);
+assetOverrideStateFiles = assetOverrideStateFiles.Select(path => Path.GetFullPath(path, builder.Environment.ContentRootPath)).ToArray();
 string assetManifestHost = assetOverrideConfig["ManifestHost"] ?? throw new InvalidOperationException("Ff7ec:AssetOverride:ManifestHost not configured");
 string assetManifestPath = assetOverrideConfig["ManifestPath"] ?? throw new InvalidOperationException("Ff7ec:AssetOverride:ManifestPath not configured");
 string assetDataHost = assetOverrideConfig["AssetHost"] ?? throw new InvalidOperationException("Ff7ec:AssetOverride:AssetHost not configured");
@@ -39,10 +43,11 @@ builder.Services.AddSingleton(sp => new PartySettingsStore(sp.GetRequiredService
 builder.Services.AddSingleton(sp => new StoryStateStore(sp.GetRequiredService<ILogger<StoryStateStore>>(), dataDir));
 builder.Services.AddSingleton(sp => new LocalAssetOverrideStore(
     sp.GetRequiredService<ILogger<LocalAssetOverrideStore>>(),
-    assetOverrideStateFile,
+    assetOverrideStateDirectory,
     assetManifestHost,
     assetManifestPath,
-    assetDataHost));
+    assetDataHost,
+    assetOverrideStateFiles));
 builder.Services.AddSingleton(sp => new PartyStateMerger(
     sp.GetRequiredService<PartySettingsStore>(),
     sp.GetRequiredService<StoryStateStore>(),
