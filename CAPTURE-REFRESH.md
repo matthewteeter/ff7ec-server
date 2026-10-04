@@ -56,7 +56,9 @@ destination **in the mitmdump process**, and starts mitmdump on port 443.
 It prints the full paths to `capture.mitm` and `staged-replay`. No session
 variables have to persist between commands or PowerShell windows. The addon
 routes the captured requests to the real servers; no live responses go to
-the active replay store until the verified import in step 6.
+the active replay store until the verified import in step 6. The add-on is included
+in `tools\mitm_ff7ec_addon.py`; it contains no embedded account information,
+certificates, or private keys. Its outputs are still private.
 
 ## 4. Redirect FF7EC to the capture proxy
 

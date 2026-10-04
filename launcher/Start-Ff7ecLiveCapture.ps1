@@ -9,7 +9,7 @@ param(
 
 $ErrorActionPreference = "Stop"
 $root = Split-Path -Parent $PSScriptRoot
-$addon = "E:\FF7EC_Preservation\work\mitm_ff7ec_addon.py"
+$addon = Join-Path $root "tools\mitm_ff7ec_addon.py"
 $ca = Join-Path $HOME ".mitmproxy\mitmproxy-ca-cert.cer"
 $hostsFile = Join-Path $env:SystemRoot "System32\drivers\etc\hosts"
 

@@ -8,7 +8,7 @@ once returned for the same request, captured while they were still live.
 ## How it works
 
 1. **Capture** (while the real servers are up): [mitmproxy](https://mitmproxy.org/) +
-   a custom addon (`../FF7EC_Preservation/work/mitm_ff7ec_addon.py`) intercept the game's
+   a custom addon (`tools/mitm_ff7ec_addon.py`) intercept the game's
    HTTPS traffic via a hosts-file redirect, recording full request/response pairs to a
    `.mitm` file.
 2. **Import**: `tools/export_capture_store.py` converts a `.mitm` capture into this repo's
@@ -89,6 +89,7 @@ no code changes needed for that.
 Ff7ec.Server.sln
 src/Ff7ec.Server/       - the replay server (see Program.cs)
 tools/export_capture_store.py  - .mitm -> captures/ importer
+tools/mitm_ff7ec_addon.py - code-only capture add-on (no embedded account data or keys)
 captures/{host}/        - captured response store (see below)
 certs/                  - auto-generated CA + leaf cert (created on first run)
 gaps/                   - requests with no captured response are logged here for later capture
