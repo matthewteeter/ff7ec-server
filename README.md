@@ -1,9 +1,10 @@
 # FF7EC Offline Server
 
 A personal, non-commercial offline replay server for **Final Fantasy VII Ever Crisis**,
-built because the real game servers are shutting down. It does not understand or
-re-implement the game's business logic - it plays back exactly what the real servers
-once returned for the same request, captured while they were still live.
+built because the real game servers are shutting down. By default it plays back
+responses captured while the real servers were live. Narrow writable handlers and an
+optional exported-account mode generate responses locally; this is not a complete
+reimplementation of the game's business logic.
 
 ## How it works
 
@@ -28,16 +29,118 @@ once returned for the same request, captured while they were still live.
    table, and later account snapshots are overlaid with each selection's latest choice.
    This prevents chapter 7/8 branches from reverting to the choices in the old capture.
 
-### Why verbatim replay is enough (no decryption needed)
+### Replay and generated responses
 
 The real API wraps request/response bodies in an application-layer encryption scheme on
-top of TLS (`x-content-encoding-secure`, `x-content-hash`, a rotating `x-token`) that has
-not been reverse-engineered. This turns out not to matter for replay: because the server
+top of TLS (`x-content-encoding-secure`, `x-content-hash`, a rotating `x-token`).
+This does not require decoding for verbatim replay: because the server
 sends back the **exact bytes and exact headers** the real server sent for that call, any
 client-side integrity check the game performs still passes - nothing was tampered with,
-it's the same (body, hash) pair the client already saw once during capture. The tradeoff
-is that this server cannot generate *new* responses to reflect state changes (completing
-a quest, spending currency, etc.) - see Scope below.
+it's the same (body, hash) pair the client already saw once during capture.
+Generated responses use the local protobuf/LZ4/AES transport implementation and
+recompute the response hash. Only explicitly supported state changes are implemented;
+completing quests and spending currency remain outside the general replay scope.
+
+### Optional exported-account mode
+
+Account state can instead come from a private exported JSON snapshot containing
+`AccountInfo`, `OtherInfo`, gifts, friends, block lists, and guild lists. This is
+opt-in; without configuration, existing replay behavior is unchanged.
+
+```powershell
+.\launcher\Start-Ff7ecOffline.ps1 `
+  -AccountJsonPath "D:\PrivateFF7EC\account-export.json"
+```
+
+Only your private account JSON is required. The source includes
+`src\Ff7ec.Server\ProtocolSchemas\ff7ec-24813881.json`, a compact, versioned set of
+field mappings for final Steam client build **24813881**. It is also copied into
+build and publish output. No client dump or dummy DLL is needed for that build.
+The schema contains field names, numbers, scalar/message types, and repeated-field
+flags for the account tables and supported responses; it contains no executable
+code, account values, credentials, keys, or captured traffic. Unlike the older
+`ff7ecapi` schemas, these mappings cover Highwind, guilds, Memoria, and newer weapon
+fields. Keep your export outside the repository.
+
+Unknown fields, mixed account IDs, malformed JSON, unsupported schema versions,
+unresolved types, duplicate field tags, and unsupported property types fail startup
+instead of silently discarding data. IDs and counters are encoded as exact
+integers, never floating-point numbers.
+
+For direct server startup, configure `Ff7ec:AccountExport:JsonPath` using command-line configuration or
+environment variables (`Ff7ec__AccountExport__JsonPath`, etc.). Relative paths use
+the server content root. `ApiHost` defaults to the first configured hostname.
+`FrozenServerTime` optionally selects a positive Unix timestamp in milliseconds;
+otherwise the JSON file's last-write time supplies a fixed offline clock. Choose a
+clock consistent with the exported state; timers do not advance in this mode.
+
+For a different client build, pass `-ProtocolSchemaPath` to the launcher or set
+`Ff7ec:AccountExport:ProtocolSchemaPath` to a matching schema file. The build ID in
+the schema identifies its provenance, not automatic compatibility negotiation.
+`-ProtocolAssemblyPath` / `Ff7ec:AccountExport:ProtocolAssemblyPath` remains an
+optional developer override and takes precedence over the configured schema.
+Do not pass both override switches to the launcher. DLL overrides are read using
+PE metadata only; the assembly is never loaded or executed.
+
+Maintainers can regenerate the minimal schema from a compatible dummy assembly:
+
+```powershell
+dotnet run --project tools\Ff7ec.ProtocolSchema -- `
+  "D:\PrivateFF7EC\DummyDll\Command.Domain.dll" `
+  "src\Ff7ec.Server\ProtocolSchemas\ff7ec-24813881.json" 24813881
+```
+
+The generator reads no account JSON. It exports only the reachable account/list
+message graph and the envelope tags needed by the supported handlers, with stable
+ordering. Enums use numeric mappings; enum labels and unrelated APIs are excluded.
+Schema fields are `[tag, type]`, or `[tag, type, true]` for repeated fields, under
+each message name. The file's `formatVersion` is currently `1`.
+Envelope fields typed as `bytes` are opaque length-delimited payloads constructed
+directly by the handlers; this is not a general-purpose schema for every game API.
+
+The server generates encrypted, LZ4-compressed protobuf bodies for:
+
+| Endpoint | Snapshot source |
+|---|---|
+| `/api/auth/session` | Minimal session acknowledgement |
+| `/api/pvt/user/title` | All account tables and auxiliary account state |
+| `/api/pvt/gift/list`, `/api/pvt/gift/history` | Gifts and gift history |
+| `/api/pvt/friend/list`, `/api/pvt/friend/receive/list`, `/api/pvt/friend/request/list` | Friend lists |
+| `/api/pvt/user/deny/list` | Block list |
+| `/api/pvt/guild/member/list`, `/api/pvt/guild/watch/list` | Guild lists |
+
+Account-response **bodies are not replayed** for these endpoints. A successful
+secure header template for the same host/account is still required: the exact
+endpoint capture is preferred, with title, Steam purchase-restart, or session
+headers as fallbacks. Missing headers return HTTP 503. Assets, `/api/check`, and
+unimplemented endpoint payloads still use captures; this is not a capture-free
+replacement for the whole game server. Existing captures' common account updates
+and deletions are suppressed in export mode so they cannot reset imported state.
+Requests for another or missing user ID are rejected.
+
+Gift exports have no paging metadata: their list is served as a single page zero,
+and later pages are empty with the same total count. Null lists become empty
+protobuf lists. This mode does not implement gift collection, purchases, battle
+rewards, or other new account progression.
+
+Existing party, wallpaper, and story-selection writes continue to persist in
+`Ff7ec:DataDirectory` and overlay the exported title response on later loads and
+server restarts. Write acknowledgements use generated common account envelopes,
+not stale captured account bodies. The original export is read-only; restart the
+server to reload an edited export. Use a separate data directory if old local
+overlays should not override the imported settings.
+
+Run the source-only checks (including an isolated HTTPS server with header-only
+account templates, plus a synthetic replay response to check stale-state suppression):
+
+```powershell
+dotnet run --project tests\Ff7ec.AccountExport.Checks -- --http
+.\tests\Ff7ec.AccountExport.Checks\Check-Launcher.ps1
+```
+
+Optionally pass your private JSON and a matching schema JSON (or developer DLL)
+before `--http` to verify the complete export as well. Neither private account
+data nor dummy assemblies are copied into source control.
 
 ### Writable-setting limits
 
@@ -78,7 +181,7 @@ without a captured write.
 ## Scope: "boot + roam"
 
 This targets booting into the game and browsing already-downloaded content (menus,
-roster, inventory) using the account's real captured data - not battles, gacha, or any
+roster, inventory) using the account's real captured or exported data - not battles, gacha, or any
 flow that requires the server to react to new player actions with novel responses.
 Extending coverage just means capturing more real traffic and re-running the importer;
 no code changes needed for that.

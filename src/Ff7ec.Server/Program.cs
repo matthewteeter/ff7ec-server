@@ -1,4 +1,5 @@
 using System.Security.Cryptography.X509Certificates;
+using System.Security.Cryptography;
 using Microsoft.AspNetCore.Http.Extensions;
 using Ff7ec.Server;
 
@@ -21,6 +22,27 @@ string assetManifestPath = assetOverrideConfig["ManifestPath"] ?? throw new Inva
 string assetDataHost = assetOverrideConfig["AssetHost"] ?? throw new InvalidOperationException("Ff7ec:AssetOverride:AssetHost not configured");
 string[] hostNames = config.GetSection("Hostnames").Get<string[]>()
     ?? throw new InvalidOperationException("Ff7ec:Hostnames not configured");
+var accountExportConfig = config.GetSection("AccountExport");
+string? accountJsonPath = accountExportConfig["JsonPath"];
+string? protocolAssemblyPath = accountExportConfig["ProtocolAssemblyPath"];
+if (string.IsNullOrWhiteSpace(accountJsonPath) && !string.IsNullOrWhiteSpace(protocolAssemblyPath))
+    throw new InvalidOperationException("AccountExport:ProtocolAssemblyPath requires JsonPath.");
+if (!string.IsNullOrWhiteSpace(accountJsonPath))
+{
+    string jsonPath = Path.GetFullPath(accountJsonPath, builder.Environment.ContentRootPath);
+    string protocolPath = !string.IsNullOrWhiteSpace(protocolAssemblyPath)
+        ? protocolAssemblyPath
+        : accountExportConfig["ProtocolSchemaPath"] ?? AccountExportStore.DefaultProtocolSchemaPath;
+    if (string.IsNullOrWhiteSpace(protocolPath))
+        throw new InvalidOperationException("AccountExport:ProtocolSchemaPath must identify a protocol-schema file.");
+    protocolPath = Path.GetFullPath(protocolPath, builder.Environment.ContentRootPath);
+    builder.Services.AddSingleton(sp => new AccountExportStore(
+        sp.GetRequiredService<ILogger<AccountExportStore>>(),
+        jsonPath,
+        protocolPath,
+        accountExportConfig["ApiHost"] ?? hostNames[0],
+        accountExportConfig.GetValue<long?>("FrozenServerTime")));
+}
 
 var (leafCert, rootCaCert) = CertManager.EnsureCertificates(certDir, hostNames);
 Console.WriteLine($"[FF7EC] Using leaf cert '{leafCert.Subject}' (thumbprint {leafCert.Thumbprint})");
@@ -62,6 +84,7 @@ var partySettingsStore = app.Services.GetRequiredService<PartySettingsStore>();
 var storyStateStore = app.Services.GetRequiredService<StoryStateStore>();
 var assetOverrideStore = app.Services.GetRequiredService<LocalAssetOverrideStore>();
 var partyStateMerger = app.Services.GetRequiredService<PartyStateMerger>();
+var accountExportStore = app.Services.GetService<AccountExportStore>();
 app.Logger.LogInformation("FF7EC offline server ready - {Count} captured responses loaded, listening on :{Port} for {Hosts}",
     store.Count, listenPort, string.Join(", ", hostNames));
 
@@ -121,6 +144,56 @@ app.Run(async context =>
     }
 
     var requestPath = request.Path.Value ?? string.Empty;
+    bool isExportAccountRequest = accountExportStore?.IsAccountRequest(request) == true;
+    if (isExportAccountRequest && !accountExportStore!.MatchesUser(request))
+    {
+        app.Logger.LogWarning("ACCOUNT EXPORT rejected a request for another or missing user: {Path}", requestPath);
+        context.Response.StatusCode = StatusCodes.Status403Forbidden;
+        await context.Response.WriteAsync("This server is configured for a different exported account.\n");
+        return;
+    }
+
+    if (isExportAccountRequest && accountExportStore!.Handles(requestPath) && !HttpMethods.IsPost(request.Method))
+    {
+        app.Logger.LogWarning("ACCOUNT EXPORT rejected method {Method} at {Path}", request.Method, requestPath);
+        context.Response.StatusCode = StatusCodes.Status405MethodNotAllowed;
+        context.Response.Headers.Allow = HttpMethods.Post;
+        return;
+    }
+
+    if (isExportAccountRequest && accountExportStore!.Handles(requestPath))
+    {
+        if (!accountExportStore.TryGetHeaderTemplate(request, store, out var template))
+        {
+            app.Logger.LogError("ACCOUNT EXPORT has no secure header template for {Host}{Path}", host, requestPath);
+            context.Response.StatusCode = StatusCodes.Status503ServiceUnavailable;
+            await context.Response.WriteAsync("No secure response-header template is available for this account.\n");
+            return;
+        }
+        byte[] generated;
+        try
+        {
+            foreach (var header in template.ResponseHeaders)
+                if (!suppressedHeaders.Contains(header.Name))
+                    context.Response.Headers[header.Name] = header.Value;
+            generated = accountExportStore.CreateResponse(request, bodyBytes, context.Response.Headers);
+        }
+        catch (Exception ex) when (ex is InvalidDataException or CryptographicException or InvalidOperationException or NotSupportedException)
+        {
+            app.Logger.LogWarning(ex, "ACCOUNT EXPORT rejected malformed request at {Path}", requestPath);
+            context.Response.Headers.Clear();
+            context.Response.StatusCode = StatusCodes.Status400BadRequest;
+            await context.Response.WriteAsync("Invalid exported-account API request.\n");
+            return;
+        }
+        generated = partyStateMerger.MergeReplayResponse(request, generated, context.Response.Headers) ?? generated;
+        context.Response.StatusCode = StatusCodes.Status200OK;
+        context.Response.ContentLength = generated.Length;
+        app.Logger.LogInformation("ACCOUNT EXPORT {Path} -> 200 ({Bytes} generated bytes)", requestPath, generated.Length);
+        await context.Response.Body.WriteAsync(generated);
+        return;
+    }
+
     var isSettingsWrite = writableSettingsEndpoints.Contains(requestPath);
     var isEmptyWrite = emptyWriteEndpoints.Contains(requestPath);
     if (HttpMethods.IsPost(request.Method) && (isSettingsWrite || isEmptyWrite))
@@ -166,7 +239,11 @@ app.Run(async context =>
         // envelope, replacing its endpoint-specific response and optional user update.
         var responseTemplatePath =
             $"/api/pvt/store/purchase/restart/steam?user_id={Uri.EscapeDataString(userId)}";
-        if (!store.TryGet(host, HttpMethods.Post, responseTemplatePath, out var responseTemplate))
+        CapturedResponse responseTemplate;
+        bool hasTemplate = isExportAccountRequest
+            ? accountExportStore!.TryGetHeaderTemplate(request, store, out responseTemplate)
+            : store.TryGet(host, HttpMethods.Post, responseTemplatePath, out responseTemplate);
+        if (!hasTemplate)
         {
             app.Logger.LogError(
                 "WRITE response template is missing: {Method} {Host}{Path}",
@@ -184,12 +261,15 @@ app.Run(async context =>
             context.Response.Headers[header.Name] = header.Value;
         }
 
+        var templateBody = isExportAccountRequest
+            ? accountExportStore!.CreateWriteTemplate(context.Response.Headers)
+            : responseTemplate.Body;
         var responseBody = isSettingsWrite
             ? partyStateMerger.CreateWriteResponse(
-                requestPath, userId, bodyBytes, responseTemplate.Body, context.Response.Headers)
+                requestPath, userId, bodyBytes, templateBody, context.Response.Headers)
             : partyStateMerger.CreateEmptyWriteResponse(
-                requestPath, userId, bodyBytes, responseTemplate.Body, context.Response.Headers);
-        if (responseBody is null && isSettingsWrite)
+                requestPath, userId, bodyBytes, templateBody, context.Response.Headers);
+        if (responseBody is null && isSettingsWrite && !isExportAccountRequest)
         {
             responseBody = responseTemplate.Body;
             app.Logger.LogWarning(
@@ -226,6 +306,22 @@ app.Run(async context =>
         // Replay the captured response first, then rewrite its encrypted protobuf
         // envelope with the latest state received through the write endpoint.
         var responseBody = captured.Body;
+        if (isExportAccountRequest && captured.StatusCode == StatusCodes.Status200OK)
+        {
+            try
+            {
+                responseBody = accountExportStore!.RemoveCapturedAccountState(responseBody, context.Response.Headers) ?? responseBody;
+            }
+            catch (Exception ex) when (ex is InvalidDataException or CryptographicException or NotSupportedException)
+            {
+                app.Logger.LogError(ex, "ACCOUNT EXPORT could not remove captured account state at {Path}", requestPath);
+                context.Response.Headers.Clear();
+                context.Response.StatusCode = StatusCodes.Status500InternalServerError;
+                await context.Response.WriteAsync("Could not isolate exported account state from the replay response.\n");
+                return;
+            }
+            context.Response.ContentLength = responseBody.Length;
+        }
         if (HttpMethods.IsGet(request.Method) && assetOverrideStore.TryGetManifest(host, pathAndQuery, out var overrideManifest))
         {
             responseBody = overrideManifest;

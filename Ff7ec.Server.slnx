@@ -5,8 +5,10 @@
   </Folder>
   <Folder Name="/tools/">
     <Project Path="tools/Ff7ec.AssetOverride/Ff7ec.AssetOverride.csproj" />
+    <Project Path="tools/Ff7ec.ProtocolSchema/Ff7ec.ProtocolSchema.csproj" />
   </Folder>
   <Folder Name="/tests/">
+    <Project Path="tests/Ff7ec.AccountExport.Checks/Ff7ec.AccountExport.Checks.csproj" />
     <Project Path="tests/Ff7ec.AssetOverride.Checks/Ff7ec.AssetOverride.Checks.csproj" />
   </Folder>
 </Solution>

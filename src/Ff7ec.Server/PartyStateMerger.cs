@@ -1,6 +1,5 @@
 using System.Globalization;
-using System.Security.Cryptography;
-using K4os.Compression.LZ4.Streams;
+using static Ff7ec.Server.ApiTransport;
 
 namespace Ff7ec.Server;
 
@@ -25,9 +24,6 @@ public sealed class PartyStateMerger
     private const int UserStoryDramaSelectionTable = 78231314;
     private const int UserHomeBackgroundSettingTable = 242346576;
     private const int UserPartyTable = 312005933;
-
-    private static readonly byte[] ClientApiKey = Convert.FromBase64String("Gs69+UiZDGBrjzj0uGq/m6mFs66bBUAP5ykHOROesZ4=");
-    private static readonly byte[] ServerApiKey = Convert.FromBase64String("CMMnsenXvr7izAFborJvCZHwFrG40sykNgUSqgJ99+A=");
 
     private readonly PartySettingsStore _store;
     private readonly StoryStateStore _storyStore;
@@ -95,7 +91,7 @@ public sealed class PartyStateMerger
     {
         try
         {
-            var request = ProtobufWire.Parse(Decompress(Decrypt(requestBody, ClientApiKey)));
+            var request = ProtobufWire.Parse(DecodeRequest(requestBody));
             var responseField = GetEmptyWriteField(endpoint);
             var requestField = request.FirstOrDefault(
                 field => field.Number == responseField && field.WireType == 2);
@@ -162,8 +158,7 @@ public sealed class PartyStateMerger
             var storySelections = _storyStore.GetSelections(host, userId);
             if (records.Count == 0 && storySelections.Count == 0) return null;
 
-            var compressed = Decrypt(capturedBody, ServerApiKey);
-            var plain = Decompress(compressed);
+            var plain = DecodeResponse(capturedBody);
             var root = ProtobufWire.Parse(plain);
             if (root.Count == 0) return null;
 
@@ -259,8 +254,7 @@ public sealed class PartyStateMerger
         string userId,
         long updatedDatetime)
     {
-        var compressed = Decrypt(body, ClientApiKey);
-        var request = ProtobufWire.Parse(Decompress(compressed));
+        var request = ProtobufWire.Parse(DecodeRequest(body));
         var fieldNumber = GetRequestField(endpoint);
         var requestField = request.FirstOrDefault(field => field.Number == fieldNumber && field.WireType == 2);
         if (requestField is null)
@@ -492,7 +486,7 @@ public sealed class PartyStateMerger
     {
         // Preserve the complete captured success envelope. Some endpoint handlers expect
         // User.delete and User.other_info to remain present even when no rows are updated.
-        var templatePlain = Decompress(Decrypt(responseTemplateBody, ServerApiKey));
+        var templatePlain = DecodeResponse(responseTemplateBody);
         var root = ProtobufWire.Parse(templatePlain);
 
         if (updateTables is not null)
@@ -526,61 +520,6 @@ public sealed class PartyStateMerger
             throw new InvalidDataException("Secure response template has no valid X-Server-Time header.");
         return replayTime;
     }
-
-    private static byte[] EncodeResponse(byte[] plain, IHeaderDictionary responseHeaders)
-    {
-        var compressed = Compress(plain);
-        responseHeaders["X-Content-Hash"] = ToUrlSafeBase64(SHA256.HashData(compressed));
-        return Encrypt(compressed, ServerApiKey);
-    }
-
-    private static byte[] Decrypt(byte[] payload, byte[] key)
-    {
-        if (payload.Length < 32) throw new InvalidDataException("Encrypted payload is too short.");
-        using var aes = Aes.Create();
-        aes.Key = key;
-        aes.IV = payload[..16];
-        using var input = new MemoryStream(payload, 16, payload.Length - 16);
-        using var crypto = new CryptoStream(input, aes.CreateDecryptor(), CryptoStreamMode.Read);
-        using var output = new MemoryStream();
-        crypto.CopyTo(output);
-        return output.ToArray();
-    }
-
-    private static byte[] Encrypt(byte[] payload, byte[] key)
-    {
-        using var aes = Aes.Create();
-        aes.Key = key;
-        aes.GenerateIV();
-        using var output = new MemoryStream();
-        output.Write(aes.IV);
-        using (var crypto = new CryptoStream(output, aes.CreateEncryptor(), CryptoStreamMode.Write, leaveOpen: true))
-        {
-            crypto.Write(payload);
-            crypto.FlushFinalBlock();
-        }
-        return output.ToArray();
-    }
-
-    private static byte[] Decompress(byte[] bytes)
-    {
-        using var input = new MemoryStream(bytes);
-        using var decoder = LZ4Stream.Decode(input);
-        using var output = new MemoryStream();
-        decoder.CopyTo(output);
-        return output.ToArray();
-    }
-
-    private static byte[] Compress(byte[] bytes)
-    {
-        using var output = new MemoryStream();
-        using (var encoder = LZ4Stream.Encode(output))
-            encoder.Write(bytes);
-        return output.ToArray();
-    }
-
-    private static string ToUrlSafeBase64(byte[] bytes) =>
-        Convert.ToBase64String(bytes).Replace('+', '-').Replace('/', '_');
 
     private sealed class SavedState
     {

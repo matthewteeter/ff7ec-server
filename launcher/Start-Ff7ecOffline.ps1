@@ -9,10 +9,22 @@
 
 .PARAMETER SkipAssetOverrides
     Restore any tracked overrides and start offline mode using original assets.
+
+.PARAMETER AccountJsonPath
+    Use a private exported account JSON file instead of captured account responses.
+
+.PARAMETER ProtocolAssemblyPath
+    Optional developer override using the matching client's DummyDll\Command.Domain.dll.
+
+.PARAMETER ProtocolSchemaPath
+    Optional override for the bundled versioned protocol-schema JSON file.
 #>
 param(
     [switch]$LaunchGame,
-    [switch]$SkipAssetOverrides
+    [switch]$SkipAssetOverrides,
+    [string]$AccountJsonPath,
+    [string]$ProtocolAssemblyPath,
+    [string]$ProtocolSchemaPath
 )
 
 $ErrorActionPreference = "Stop"
@@ -22,6 +34,22 @@ $appsettings = Get-Content -LiteralPath (Join-Path $serverProject "appsettings.j
 $certDir = [IO.Path]::GetFullPath([IO.Path]::Combine($serverProject, $appsettings.Ff7ec.CertDirectory))
 $hostnames = $appsettings.Ff7ec.Hostnames
 $caCerPath = Join-Path $certDir "ff7ec-offline-ca.cer"
+if ([string]::IsNullOrWhiteSpace($AccountJsonPath) -and
+    (-not [string]::IsNullOrWhiteSpace($ProtocolAssemblyPath) -or -not [string]::IsNullOrWhiteSpace($ProtocolSchemaPath))) {
+    throw "Protocol overrides require -AccountJsonPath."
+}
+if (-not [string]::IsNullOrWhiteSpace($ProtocolAssemblyPath) -and -not [string]::IsNullOrWhiteSpace($ProtocolSchemaPath)) {
+    throw "Choose either -ProtocolSchemaPath or -ProtocolAssemblyPath, not both."
+}
+if (-not [string]::IsNullOrWhiteSpace($AccountJsonPath)) {
+    $AccountJsonPath = (Resolve-Path -LiteralPath $AccountJsonPath).ProviderPath
+}
+if (-not [string]::IsNullOrWhiteSpace($ProtocolAssemblyPath)) {
+    $ProtocolAssemblyPath = (Resolve-Path -LiteralPath $ProtocolAssemblyPath).ProviderPath
+}
+if (-not [string]::IsNullOrWhiteSpace($ProtocolSchemaPath)) {
+    $ProtocolSchemaPath = (Resolve-Path -LiteralPath $ProtocolSchemaPath).ProviderPath
+}
 
 Write-Host "=== FF7EC Offline Server launcher ===" -ForegroundColor Cyan
 
@@ -50,6 +78,15 @@ try {
 #    visible while you play), which also generates the CA/leaf certs on first run.
 Write-Host "Starting replay server..."
 $serverCommand = "Set-Location -LiteralPath '$($serverProject.Replace("'", "''"))'; dotnet run --no-launch-profile"
+if (-not [string]::IsNullOrWhiteSpace($AccountJsonPath)) {
+    $serverCommand = "`$env:Ff7ec__AccountExport__JsonPath = '$($AccountJsonPath.Replace("'", "''"))'; " + $serverCommand
+}
+if (-not [string]::IsNullOrWhiteSpace($ProtocolAssemblyPath)) {
+    $serverCommand = "`$env:Ff7ec__AccountExport__ProtocolAssemblyPath = '$($ProtocolAssemblyPath.Replace("'", "''"))'; " + $serverCommand
+}
+if (-not [string]::IsNullOrWhiteSpace($ProtocolSchemaPath)) {
+    $serverCommand = "`$env:Ff7ec__AccountExport__ProtocolSchemaPath = '$($ProtocolSchemaPath.Replace("'", "''"))'; " + $serverCommand
+}
 $encodedCommand = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($serverCommand))
 $serverProc = Start-Process powershell.exe -ArgumentList @(
     "-NoExit", "-EncodedCommand", $encodedCommand

@@ -1,0 +1,1439 @@
+{
+  "formatVersion": 1,
+  "clientBuild": "24813881",
+  "messages": {
+    "AccessoryOption": {
+      "PassiveSkillPoint": [3,"int64"],
+      "QualityType": [2,"enum"],
+      "UserAccessoryId": [1,"int64"]
+    },
+    "ApiRequest": {
+      "PostAuthSession": [303,"bytes"],
+      "PostPvtFriendList": [481,"bytes"],
+      "PostPvtFriendReceiveList": [483,"bytes"],
+      "PostPvtFriendRequestList": [482,"bytes"],
+      "PostPvtGiftHistory": [377,"bytes"],
+      "PostPvtGiftList": [376,"bytes"],
+      "PostPvtGuildMemberList": [570,"bytes"],
+      "PostPvtGuildWatchList": [569,"bytes"],
+      "PostPvtUserDenyList": [587,"bytes"],
+      "PostPvtUserTitle": [353,"bytes"]
+    },
+    "ApiResponse": {
+      "Common": [101,"CommonResponse"],
+      "PostAuthSession": [303,"bytes"],
+      "PostPvtFriendList": [481,"PostPvtFriendListResponse"],
+      "PostPvtFriendReceiveList": [483,"PostPvtFriendReceiveListResponse"],
+      "PostPvtFriendRequestList": [482,"PostPvtFriendRequestListResponse"],
+      "PostPvtGiftHistory": [377,"PostPvtGiftHistoryResponse"],
+      "PostPvtGiftList": [376,"PostPvtGiftListResponse"],
+      "PostPvtGuildMemberList": [570,"PostPvtGuildMemberListResponse"],
+      "PostPvtGuildWatchList": [569,"PostPvtGuildWatchListResponse"],
+      "PostPvtStorePurchaseRestartSteam": [2001,"bytes"],
+      "PostPvtUserDenyList": [587,"PostPvtUserDenyListResponse"],
+      "PostPvtUserTitle": [353,"bytes"]
+    },
+    "AwardInfo": {
+      "AwardCount": [2,"int64"],
+      "AwardId": [1,"int64"]
+    },
+    "BigItemOption": {
+      "Exponent": [1,"int64"]
+    },
+    "ChocoboOption": {
+      "AdaptabilityWeight": [11,"int64"],
+      "AreaTypeFlags": [5,"int64"],
+      "ChocoboExpeditionParameterGroupId": [2,"int64"],
+      "ChocoboRankGroupId": [1,"int64"],
+      "ChocoboType": [6,"enum"],
+      "IntelligenceWeight": [10,"int64"],
+      "LimitRankType": [4,"enum"],
+      "RankType": [3,"enum"],
+      "SexType": [7,"enum"],
+      "SpeedWeight": [8,"int64"],
+      "StaminaWeight": [9,"int64"]
+    },
+    "CommonOption": {
+      "JudgeRewardType": [1,"enum"]
+    },
+    "CommonResponse": {
+      "User": [1,"User"]
+    },
+    "ExchangeOption": {
+      "Count": [3,"int64"],
+      "ExchangeRewardType": [1,"enum"],
+      "TargetId": [2,"int64"]
+    },
+    "GiftInfo": {
+      "ExpireDatetime": [9,"int64"],
+      "IsLimit": [7,"bool"],
+      "MessageDetailValue0": [3,"int64"],
+      "MessageDetailValue1": [4,"int64"],
+      "MessageDetailValue2": [5,"int64"],
+      "MessageTemplateLanguageId": [2,"int64"],
+      "ReceivedDatetime": [8,"int64"],
+      "RewardObtainType": [6,"enum"],
+      "UserGiftId": [1,"int64"]
+    },
+    "GuildInfo": {
+      "DisplayGuildId": [1,"string"],
+      "EmblemGuildItemId": [4,"int64"],
+      "GuildLevel": [3,"int64"],
+      "GuildName": [2,"string"],
+      "GuildPolicyType": [6,"enum"],
+      "GuildStyleTypeList": [7,"enum",true],
+      "Introduction": [8,"string"],
+      "IsManualApproval": [5,"bool"],
+      "IsRegisteredWatchList": [9,"bool"],
+      "IsRequestedJoin": [10,"bool"],
+      "IsSelfGuild": [12,"bool"],
+      "MemberCount": [11,"int64"]
+    },
+    "GuildMemberListInfo": {
+      "GuildRoleType": [2,"enum"],
+      "ProvideBonusLevelExp": [4,"int64"],
+      "ProvideLevelExp": [3,"int64"],
+      "UserListInfo": [1,"UserListInfo"]
+    },
+    "HistoryGiftInfo": {
+      "ArchivedDatetime": [3,"int64"],
+      "DisplayExpireDatetime": [2,"int64"],
+      "IsExpired": [4,"bool"],
+      "RewardInfo": [1,"RewardInfo"]
+    },
+    "ItemOption": {
+      "EnableObtainLimit": [1,"bool"]
+    },
+    "MateriaOption": {
+      "NotesSetId": [3,"int64"],
+      "ParameterId0": [6,"int64"],
+      "ParameterId1": [7,"int64"],
+      "ParameterId2": [8,"int64"],
+      "ParameterId3": [9,"int64"],
+      "ParameterOpenCount": [5,"int64"],
+      "ParameterValue0": [10,"int64"],
+      "ParameterValue1": [11,"int64"],
+      "ParameterValue2": [12,"int64"],
+      "ParameterValue3": [13,"int64"],
+      "QualityType": [2,"enum"],
+      "UserMateriaId": [1,"int64"]
+    },
+    "MemoriaOption": {
+      "AfterUserMemoria": [2,"UserMemoriaInfo"],
+      "BeforeUserMemoria": [1,"UserMemoriaInfo"],
+      "OverlapExchangeItemCount": [4,"int64"],
+      "ProvidingMemoria": [3,"ProvidingMemoria"]
+    },
+    "MissionAchieved": {
+      "MissionId": [1,"int64"],
+      "ProgressCount": [2,"int64"]
+    },
+    "PostPvtFriendListResponse": {
+      "UserListInfos": [1,"UserListInfo",true]
+    },
+    "PostPvtFriendReceiveListResponse": {
+      "UserListInfos": [1,"UserListInfo",true]
+    },
+    "PostPvtFriendRequestListResponse": {
+      "UserListInfos": [1,"UserListInfo",true]
+    },
+    "PostPvtGiftHistoryResponse": {
+      "HistoryGiftInfoList": [1,"HistoryGiftInfo",true]
+    },
+    "PostPvtGiftListRequest": {
+      "PageNo": [1,"int64"]
+    },
+    "PostPvtGiftListResponse": {
+      "RewardInfoList": [1,"RewardInfo",true],
+      "TotalGiftCount": [2,"int64"]
+    },
+    "PostPvtGuildMemberListResponse": {
+      "GuildMemberListInfos": [1,"GuildMemberListInfo",true]
+    },
+    "PostPvtGuildWatchListResponse": {
+      "GuildInfoList": [1,"GuildInfo",true]
+    },
+    "PostPvtUserDenyListResponse": {
+      "UserListInfos": [1,"UserListInfo",true]
+    },
+    "ProvidingMemoria": {
+      "AnalysisLevel": [2,"int64"],
+      "AnalysisPoint": [1,"int64"]
+    },
+    "ProvidingWeapon": {
+      "Level": [2,"int64"],
+      "RarityType": [1,"enum"],
+      "UpgradeCount": [4,"int64"],
+      "WeaponUpgradeType": [3,"enum"]
+    },
+    "RewardInfo": {
+      "Count": [3,"int64"],
+      "GiftInfo": [6,"GiftInfo"],
+      "IsGift": [4,"bool"],
+      "RewardOption": [5,"RewardOption"],
+      "RewardType": [1,"enum"],
+      "TargetId": [2,"int64"]
+    },
+    "RewardOption": {
+      "AccessoryOption": [2,"AccessoryOption"],
+      "BigItemOption": [7,"BigItemOption"],
+      "ChocoboOption": [4,"ChocoboOption"],
+      "CommonOption": [5,"CommonOption"],
+      "ExchangeOption": [9,"ExchangeOption"],
+      "ItemOption": [6,"ItemOption"],
+      "MateriaOption": [3,"MateriaOption"],
+      "MemoriaOption": [8,"MemoriaOption"],
+      "WeaponOption": [1,"WeaponOption"]
+    },
+    "SharedGuildAchievement": {
+      "GuildAchievementId": [2,"int64"],
+      "GuildId": [1,"int64"],
+      "ProgressCount": [3,"int64"],
+      "ReceivedProgressCount": [4,"int64"]
+    },
+    "SharedGuildBase": {
+      "CreatedDatetime": [11,"int64"],
+      "DisableRecommendSearch": [5,"bool"],
+      "EmblemGuildItemId": [9,"int64"],
+      "GuildId": [1,"int64"],
+      "GuildPolicyType": [7,"enum"],
+      "GuildStyleTypesIdxFlags0": [8,"int64"],
+      "HomeBackgroundGuildItemId": [10,"int64"],
+      "Introduction": [3,"string"],
+      "IsManualApproval": [6,"bool"],
+      "Message": [4,"string"],
+      "MessageEditDatetime": [13,"int64"],
+      "Name": [2,"string"]
+    },
+    "SharedGuildBonus": {
+      "GuildBonusId": [2,"int64"],
+      "GuildId": [1,"int64"],
+      "LastResetDatetime": [4,"int64"],
+      "Level": [3,"int64"]
+    },
+    "SharedGuildEventGuildRankingBase": {
+      "EventBaseId": [2,"int64"],
+      "EventGuildRankingBattleTotalDamageLastResetDatetime": [5,"int64"],
+      "FinalTotalScoreRank": [4,"int64"],
+      "GuildId": [1,"int64"],
+      "TotalDamageLastResetReason": [6,"enum"],
+      "TotalScore": [3,"int64"]
+    },
+    "SharedGuildEventGuildRankingBattle": {
+      "EnemyDefeatCount": [3,"int64"],
+      "EventGuildRankingBattleId": [2,"int64"],
+      "GuildId": [1,"int64"],
+      "LastBattleEndDatetime": [6,"int64"],
+      "TotalDamage": [4,"int64"],
+      "TotalScore": [5,"int64"]
+    },
+    "SharedGuildExp": {
+      "BonusLevelExp": [3,"int64"],
+      "GuildId": [1,"int64"],
+      "LevelExp": [2,"int64"]
+    },
+    "SharedGuildItem": {
+      "Count": [3,"int64"],
+      "GetDatetime": [5,"int64"],
+      "GuildId": [1,"int64"],
+      "GuildItemId": [2,"int64"],
+      "LastGetDatetime": [6,"int64"],
+      "LastResetDatetime": [7,"int64"],
+      "TotalObtainCount": [4,"int64"]
+    },
+    "SharedGuildMember": {
+      "GuildId": [1,"int64"],
+      "GuildRoleType": [3,"enum"],
+      "JoinDatetime": [4,"int64"],
+      "LastActiveDatetime": [5,"int64"],
+      "MessageReadDatetime": [7,"int64"],
+      "UserId": [2,"int64"]
+    },
+    "SharedGuildMemberSharingItem": {
+      "GuildId": [1,"int64"],
+      "ItemId": [2,"int64"],
+      "LastReceivedResetDatetime": [7,"int64"],
+      "ReceivedCount": [6,"int64"],
+      "UserId": [3,"int64"]
+    },
+    "SharedGuildShopItem": {
+      "GuildId": [1,"int64"],
+      "LastObtainDatetime": [4,"int64"],
+      "LastObtainResetDatetime": [6,"int64"],
+      "ResettableObtainCount": [5,"int64"],
+      "ShopItemId": [2,"int64"],
+      "TotalObtainCount": [3,"int64"]
+    },
+    "Tables": {
+      "SharedGuildAchievementList": [29830472,"SharedGuildAchievement",true],
+      "SharedGuildBaseList": [520205158,"SharedGuildBase",true],
+      "SharedGuildBonusList": [497080918,"SharedGuildBonus",true],
+      "SharedGuildEventGuildRankingBaseList": [191524955,"SharedGuildEventGuildRankingBase",true],
+      "SharedGuildEventGuildRankingBattleList": [224396503,"SharedGuildEventGuildRankingBattle",true],
+      "SharedGuildExpList": [327371391,"SharedGuildExp",true],
+      "SharedGuildItemList": [146969950,"SharedGuildItem",true],
+      "SharedGuildMemberList": [89542649,"SharedGuildMember",true],
+      "SharedGuildMemberSharingItemList": [172599504,"SharedGuildMemberSharingItem",true],
+      "SharedGuildShopItemList": [412893154,"SharedGuildShopItem",true],
+      "UserAbilityEnemyList": [518439670,"UserAbilityEnemy",true],
+      "UserAccessoryCollectionList": [216666042,"UserAccessoryCollection",true],
+      "UserAccessoryCraftList": [462744031,"UserAccessoryCraft",true],
+      "UserAccessoryList": [44724904,"UserAccessory",true],
+      "UserAccessoryRecipeList": [371275198,"UserAccessoryRecipe",true],
+      "UserAdvertisementList": [7927355,"UserAdvertisement",true],
+      "UserAdvertisingSettingList": [253541454,"UserAdvertisingSetting",true],
+      "UserAnotherBattleList": [185321110,"UserAnotherBattle",true],
+      "UserAnotherDungeonEntryList": [366015050,"UserAnotherDungeonEntry",true],
+      "UserAnotherDungeonExchangeList": [379417884,"UserAnotherDungeonExchange",true],
+      "UserAnotherDungeonList": [451490019,"UserAnotherDungeon",true],
+      "UserAnotherDungeonSaveList": [483522082,"UserAnotherDungeonSave",true],
+      "UserAwardList": [84430053,"UserAward",true],
+      "UserBattleEntryList": [348037468,"UserBattleEntry",true],
+      "UserBigItemList": [5165607,"UserBigItem",true],
+      "UserBoostList": [434964626,"UserBoost",true],
+      "UserBossChallengeList": [11493779,"UserBossChallenge",true],
+      "UserBoxGachaList": [536518072,"UserBoxGacha",true],
+      "UserBoxGachaRewardLimitedList": [376761274,"UserBoxGachaRewardLimited",true],
+      "UserCharacterCostumeList": [177996011,"UserCharacterCostume",true],
+      "UserCharacterList": [470504869,"UserCharacter",true],
+      "UserCharacterStoryEpisodeBattleList": [374566514,"UserCharacterStoryEpisodeBattle",true],
+      "UserCharacterStoryEpisodeList": [70311223,"UserCharacterStoryEpisode",true],
+      "UserChatStampGroupList": [349314943,"UserChatStampGroup",true],
+      "UserChocoboEventFarmList": [152341325,"UserChocoboEventFarm",true],
+      "UserChocoboExpeditionDeckList": [243702816,"UserChocoboExpeditionDeck",true],
+      "UserChocoboExpeditionGroupList": [497630121,"UserChocoboExpeditionGroup",true],
+      "UserChocoboExpeditionShortenList": [260221554,"UserChocoboExpeditionShorten",true],
+      "UserChocoboFarmList": [77702874,"UserChocoboFarm",true],
+      "UserChocoboList": [199517602,"UserChocobo",true],
+      "UserComebackList": [479484478,"UserComeback",true],
+      "UserCraftList": [162584964,"UserCraft",true],
+      "UserCraftOptionItemList": [26335114,"UserCraftOptionItem",true],
+      "UserDailyQuestEntryList": [397640286,"UserDailyQuestEntry",true],
+      "UserDailyQuestList": [354301834,"UserDailyQuest",true],
+      "UserDailyQuestSettingList": [231374457,"UserDailyQuestSetting",true],
+      "UserDailyRewardGroupList": [3131083,"UserDailyRewardGroup",true],
+      "UserDamageChallengeBattleList": [234757122,"UserDamageChallengeBattle",true],
+      "UserDungeonDramaSelectionList": [523291587,"UserDungeonDramaSelection",true],
+      "UserDungeonEntryList": [496869013,"UserDungeonEntry",true],
+      "UserDungeonTreasureGroupList": [91401000,"UserDungeonTreasureGroup",true],
+      "UserDungeonTreasureList": [349693898,"UserDungeonTreasure",true],
+      "UserDungeonTriggerLockList": [210684459,"UserDungeonTriggerLock",true],
+      "UserEpisodeBattleList": [145638114,"UserEpisodeBattle",true],
+      "UserEpisodeEntryList": [352926579,"UserEpisodeEntry",true],
+      "UserEpisodeList": [453866343,"UserEpisode",true],
+      "UserEventBaseList": [211137411,"UserEventBase",true],
+      "UserEventCrisisBattleList": [64960203,"UserEventCrisisBattle",true],
+      "UserEventCrisisBattleSoloBattleList": [231216872,"UserEventCrisisBattleSoloBattle",true],
+      "UserEventDamageRankingBattleSoloBattleList": [67246496,"UserEventDamageRankingBattleSoloBattle",true],
+      "UserEventDramaSelectionList": [420358611,"UserEventDramaSelection",true],
+      "UserEventGuildRankingBaseList": [282964284,"UserEventGuildRankingBase",true],
+      "UserEventGuildRankingBattleEntryList": [483254951,"UserEventGuildRankingBattleEntry",true],
+      "UserEventGuildRankingBattleList": [340346445,"UserEventGuildRankingBattle",true],
+      "UserEventIdlingCollectList": [144793023,"UserEventIdlingCollect",true],
+      "UserEventMemoriaList": [175031597,"UserEventMemoria",true],
+      "UserEventMultiBattleList": [276224501,"UserEventMultiBattle",true],
+      "UserEventScenarioEpisodeList": [303529414,"UserEventScenarioEpisode",true],
+      "UserEventScoreDungeonEntryList": [111504963,"UserEventScoreDungeonEntry",true],
+      "UserEventSoloBattleList": [75634232,"UserEventSoloBattle",true],
+      "UserFirstMeetingList": [267483008,"UserFirstMeeting",true],
+      "UserGachaStampSheetCellChoiceGroupList": [435029244,"UserGachaStampSheetCellChoiceGroup",true],
+      "UserGachaStampSheetGroupList": [131279630,"UserGachaStampSheetGroup",true],
+      "UserGachaStepGroupList": [396476679,"UserGachaStepGroup",true],
+      "UserGachaWishChoiceList": [217974652,"UserGachaWishChoice",true],
+      "UserGrowthBoardGroupList": [482350451,"UserGrowthBoardGroup",true],
+      "UserGuildBaseList": [310604536,"UserGuildBase",true],
+      "UserGuildBonusList": [209286001,"UserGuildBonus",true],
+      "UserGuildPlayRecordList": [108652072,"UserGuildPlayRecord",true],
+      "UserHighwindBattleList": [11475233,"UserHighwindBattle",true],
+      "UserHighwindBattleReleaseList": [39474168,"UserHighwindBattleRelease",true],
+      "UserHighwindKeyItemEffectGroupList": [367244463,"UserHighwindKeyItemEffectGroup",true],
+      "UserHighwindKeyItemList": [142506250,"UserHighwindKeyItem",true],
+      "UserHighwindList": [111083208,"UserHighwind",true],
+      "UserHighwindPartsList": [415716746,"UserHighwindParts",true],
+      "UserHomeBackgroundList": [182461828,"UserHomeBackground",true],
+      "UserHomeBackgroundSettingList": [242346576,"UserHomeBackgroundSetting",true],
+      "UserHonorList": [221515292,"UserHonor",true],
+      "UserItemList": [331261873,"UserItem",true],
+      "UserLimitedReleaseList": [489119532,"UserLimitedRelease",true],
+      "UserLoginBonusList": [519551592,"UserLoginBonus",true],
+      "UserMaintenanceExtensionList": [184655097,"UserMaintenanceExtension",true],
+      "UserMateriaCollectionList": [419459274,"UserMateriaCollection",true],
+      "UserMateriaCraftList": [84050554,"UserMateriaCraft",true],
+      "UserMateriaList": [19548514,"UserMateria",true],
+      "UserMateriaRecipeList": [32650813,"UserMateriaRecipe",true],
+      "UserMemoriaList": [25430143,"UserMemoria",true],
+      "UserMissionGroupList": [276062282,"UserMissionGroup",true],
+      "UserMissionList": [388350056,"UserMission",true],
+      "UserMissionSetList": [249555284,"UserMissionSet",true],
+      "UserMissionSpecialSummonList": [91028307,"UserMissionSpecialSummon",true],
+      "UserMultiAreaBattleList": [328225571,"UserMultiAreaBattle",true],
+      "UserMultiBattleEntryList": [398172826,"UserMultiBattleEntry",true],
+      "UserPartyArmouryList": [60548446,"UserPartyArmoury",true],
+      "UserPartyList": [312005933,"UserParty",true],
+      "UserPartyMemberList": [17062056,"UserPartyMember",true],
+      "UserPlayRecordList": [422068443,"UserPlayRecord",true],
+      "UserProfileList": [327798233,"UserProfile",true],
+      "UserRecoveryStoneList": [67390510,"UserRecoveryStone",true],
+      "UserSeasonPassList": [153868888,"UserSeasonPass",true],
+      "UserSettingList": [348759352,"UserSetting",true],
+      "UserShopItemLineupList": [326902235,"UserShopItemLineup",true],
+      "UserShopItemList": [342637010,"UserShopItem",true],
+      "UserShopList": [292821734,"UserShop",true],
+      "UserSkillOveraccelList": [415505131,"UserSkillOveraccel",true],
+      "UserSkillSpecialList": [164726483,"UserSkillSpecial",true],
+      "UserSoloAreaBattleList": [382101703,"UserSoloAreaBattle",true],
+      "UserSoloAreaGroupCategoryList": [78010291,"UserSoloAreaGroupCategory",true],
+      "UserSoloAreaList": [262249677,"UserSoloArea",true],
+      "UserStatusList": [259686066,"UserStatus",true],
+      "UserSteamAchievementList": [173482689,"UserSteamAchievement",true],
+      "UserStoryDramaSelectionList": [78231314,"UserStoryDramaSelection",true],
+      "UserSummonList": [417328171,"UserSummon",true],
+      "UserTimeList": [355855709,"UserTime",true],
+      "UserTowerList": [24354837,"UserTower",true],
+      "UserTutorialStepList": [274829521,"UserTutorialStep",true],
+      "UserWeaponAttachmentEffectSelectingList": [223560503,"UserWeaponAttachmentEffectSelecting",true],
+      "UserWeaponList": [231622239,"UserWeapon",true]
+    },
+    "User": {
+      "Delete": [2,"Tables"],
+      "OtherInfo": [3,"UserOtherInfo"],
+      "Update": [1,"Tables"]
+    },
+    "UserAbilityEnemy": {
+      "AbilityEnemyId": [2,"int64"],
+      "UserId": [1,"int64"]
+    },
+    "UserAccessory": {
+      "AccessoryId": [3,"int64"],
+      "GetDatetime": [6,"int64"],
+      "IsLock": [7,"bool"],
+      "PassiveSkillPoint": [5,"int64"],
+      "QualityType": [4,"enum"],
+      "UserAccessoryId": [2,"int64"],
+      "UserId": [1,"int64"]
+    },
+    "UserAccessoryCollection": {
+      "AccessoryId": [2,"int64"],
+      "QualityFiveCraftCount": [12,"int64"],
+      "QualityFiveObtainCount": [7,"int64"],
+      "QualityFourCraftCount": [11,"int64"],
+      "QualityFourObtainCount": [6,"int64"],
+      "QualityOneCraftCount": [8,"int64"],
+      "QualityOneObtainCount": [3,"int64"],
+      "QualityThreeCraftCount": [10,"int64"],
+      "QualityThreeObtainCount": [5,"int64"],
+      "QualityTwoCraftCount": [9,"int64"],
+      "QualityTwoObtainCount": [4,"int64"],
+      "UserId": [1,"int64"]
+    },
+    "UserAccessoryCraft": {
+      "AccessoryId": [4,"int64"],
+      "AccessoryRecipeId": [3,"int64"],
+      "Idx": [2,"int64"],
+      "QualityType": [5,"enum"],
+      "UserId": [1,"int64"]
+    },
+    "UserAccessoryRecipe": {
+      "AccessoryRecipeId": [2,"int64"],
+      "CraftCount": [3,"int64"],
+      "UserId": [1,"int64"]
+    },
+    "UserAdvertisement": {
+      "AdvertisementId": [2,"int64"],
+      "TotalViewCount": [4,"int64"],
+      "UserId": [1,"int64"],
+      "ViewCount": [3,"int64"],
+      "ViewCountLastResetDatetime": [5,"int64"]
+    },
+    "UserAdvertisingSetting": {
+      "IsAgeSixteenOrOver": [3,"enum"],
+      "IsPersonalizedAdvertisingEnabled": [2,"enum"],
+      "UserId": [1,"int64"]
+    },
+    "UserAnotherBattle": {
+      "AnotherBattleId": [2,"int64"],
+      "BossEnhanceStage": [3,"int64"],
+      "IsDone": [5,"bool"],
+      "IsDoneWhenSave": [6,"bool"],
+      "UserId": [1,"int64"],
+      "WinCount": [4,"int64"]
+    },
+    "UserAnotherDungeon": {
+      "AchievedDungeonMissionId0": [10,"bool"],
+      "AchievedDungeonMissionId1": [11,"bool"],
+      "AchievedDungeonMissionId2": [12,"bool"],
+      "AchievedScoreOptionIdxFlags0": [6,"int64"],
+      "AnotherDungeonId": [2,"int64"],
+      "HighRankType": [3,"enum"],
+      "HighScore": [4,"int64"],
+      "IsUsedMemoria0": [14,"bool"],
+      "LastUpdateScoreDatetime": [13,"int64"],
+      "UsedCharacterId0": [7,"int64"],
+      "UsedCharacterId1": [8,"int64"],
+      "UsedCharacterId2": [9,"int64"],
+      "UserId": [1,"int64"],
+      "WinCount": [5,"int64"]
+    },
+    "UserAnotherDungeonEntry": {
+      "AnotherBattleIdxFlag": [16,"int64"],
+      "BattleInfo": [27,"string"],
+      "BattleResultInfo": [28,"string"],
+      "BossEnhanceStage": [3,"int64"],
+      "BuffDebuffInfo": [15,"string"],
+      "DungeonMissionInfo": [23,"string"],
+      "DungeonType": [2,"enum"],
+      "EntryAnotherBattleIdxFlag": [25,"int64"],
+      "IsBanSkill": [6,"bool"],
+      "IsExBoss": [7,"bool"],
+      "IsUsedSkillHealType": [22,"bool"],
+      "MaxBattleTimeSec": [18,"int64"],
+      "MaxBlowDamage": [20,"int64"],
+      "MinBattleRankType": [17,"enum"],
+      "RankSIdxFlag": [24,"int64"],
+      "SaveDatetime": [26,"int64"],
+      "TotalAtbCost": [4,"int64"],
+      "TotalBattleTimeScore": [11,"int64"],
+      "TotalBossCount": [5,"int64"],
+      "TotalDeathCount": [19,"int64"],
+      "TotalDeathCountScore": [8,"int64"],
+      "TotalMaxBlowDamageScore": [9,"int64"],
+      "TotalNotesBreakCountScore": [13,"int64"],
+      "TotalTakenDamageScore": [10,"int64"],
+      "TotalWeakElementDamage": [21,"int64"],
+      "TotalWeakElementHitCountScore": [12,"int64"],
+      "UnselectedDungeonBuffDebuffSelectId": [14,"int64"],
+      "UserId": [1,"int64"]
+    },
+    "UserAnotherDungeonExchange": {
+      "ExchangeCount": [2,"int64"],
+      "ExchangedAt": [3,"int64"],
+      "UserId": [1,"int64"]
+    },
+    "UserAnotherDungeonSave": {
+      "AnotherBattleIdxFlag": [18,"int64"],
+      "BattleInfo": [28,"string"],
+      "BattleResultInfo": [29,"string"],
+      "BossEnhanceStage": [3,"int64"],
+      "BuffDebuffInfo": [17,"string"],
+      "ChaserEncountCount": [27,"int64"],
+      "DungeonMissionInfo": [25,"string"],
+      "DungeonType": [2,"enum"],
+      "InstantItemInfo": [16,"string"],
+      "IsBanSkill": [6,"bool"],
+      "IsExBoss": [7,"bool"],
+      "IsUsedSkillHealType": [24,"bool"],
+      "MaxBattleTimeSec": [20,"int64"],
+      "MaxBlowDamage": [22,"int64"],
+      "MinBattleRankType": [19,"enum"],
+      "RankSIdxFlag": [26,"int64"],
+      "TotalAtbCost": [4,"int64"],
+      "TotalBattleTimeScore": [11,"int64"],
+      "TotalBossCount": [5,"int64"],
+      "TotalDeathCount": [21,"int64"],
+      "TotalDeathCountScore": [8,"int64"],
+      "TotalMaxBlowDamageScore": [9,"int64"],
+      "TotalNotesBreakCountScore": [14,"int64"],
+      "TotalOverKillDamageScore": [12,"int64"],
+      "TotalTakenDamageScore": [10,"int64"],
+      "TotalWeakElementDamage": [23,"int64"],
+      "TotalWeakElementHitCountScore": [13,"int64"],
+      "UnselectedDungeonBuffDebuffSelectId": [15,"int64"],
+      "UserId": [1,"int64"]
+    },
+    "UserAward": {
+      "AwardCount": [3,"int64"],
+      "AwardId": [2,"int64"],
+      "UserId": [1,"int64"]
+    },
+    "UserBattleEntry": {
+      "AppVersion": [12,"string"],
+      "BattleId": [3,"int64"],
+      "BattleProgressType": [6,"enum"],
+      "BattleType": [4,"enum"],
+      "BossChallengeLevel": [15,"int64"],
+      "ContentId": [5,"int64"],
+      "ContinueCount": [7,"int64"],
+      "EntryCount": [2,"int64"],
+      "IsBoost": [8,"bool"],
+      "IsTotalPointBoostEnabled": [16,"bool"],
+      "MasterVersion": [13,"string"],
+      "PartyId": [11,"int64"],
+      "StaminaBoostType": [9,"enum"],
+      "StartDatetime": [14,"int64"],
+      "UserId": [1,"int64"]
+    },
+    "UserBigItem": {
+      "BigItemId": [2,"int64"],
+      "CountExponent": [4,"int64"],
+      "CountSignificand": [3,"int64"],
+      "GetDatetime": [5,"int64"],
+      "LastGetDatetime": [6,"int64"],
+      "UserId": [1,"int64"]
+    },
+    "UserBoost": {
+      "BoostId": [2,"int64"],
+      "LastResetDatetime": [5,"int64"],
+      "RemainBoostCount": [3,"int64"],
+      "TotalBoostCount": [4,"int64"],
+      "UserId": [1,"int64"]
+    },
+    "UserBossChallenge": {
+      "BossChallengeId": [2,"int64"],
+      "ClearLevel": [3,"int64"],
+      "UserId": [1,"int64"]
+    },
+    "UserBoxGacha": {
+      "BoxGachaId": [2,"int64"],
+      "CurrentBoxGachaRewardGroupId": [3,"int64"],
+      "TotalRewardGroupUpdateCount": [4,"int64"],
+      "UserId": [1,"int64"]
+    },
+    "UserBoxGachaRewardLimited": {
+      "BoxGachaId": [2,"int64"],
+      "BoxGachaRewardId": [3,"int64"],
+      "DrawCount": [4,"int64"],
+      "UserId": [1,"int64"]
+    },
+    "UserCharacter": {
+      "CharacterId": [2,"int64"],
+      "Exp": [3,"int64"],
+      "LastChangeMissionDatetime": [6,"int64"],
+      "MissionGroupId": [5,"int64"],
+      "OverExp": [4,"int64"],
+      "OveraccelMissionGroupId": [7,"int64"],
+      "UserId": [1,"int64"]
+    },
+    "UserCharacterCostume": {
+      "CostumeId": [2,"int64"],
+      "UserId": [1,"int64"]
+    },
+    "UserCharacterStoryEpisode": {
+      "CharacterStoryEpisodeId": [2,"int64"],
+      "UserId": [1,"int64"]
+    },
+    "UserCharacterStoryEpisodeBattle": {
+      "BattleId": [3,"int64"],
+      "CharacterStoryEpisodeId": [2,"int64"],
+      "UserId": [1,"int64"]
+    },
+    "UserChatStampGroup": {
+      "ChatStampGroupId": [2,"int64"],
+      "ChatStampIdxFlags0": [3,"int64"],
+      "UserId": [1,"int64"]
+    },
+    "UserChocobo": {
+      "Adaptability": [19,"int64"],
+      "AdaptabilityWeight": [15,"int64"],
+      "AdditionalAdaptability": [27,"int64"],
+      "AdditionalIntelligence": [26,"int64"],
+      "AdditionalSpeed": [24,"int64"],
+      "AdditionalStamina": [25,"int64"],
+      "AreaTypeFlags": [8,"int64"],
+      "ChocoboExpeditionParameterGroupId": [5,"int64"],
+      "ChocoboId": [3,"int64"],
+      "ChocoboRankGroupId": [4,"int64"],
+      "ChocoboType": [9,"enum"],
+      "FoodCount": [28,"int64"],
+      "GetDatetime": [32,"int64"],
+      "Intelligence": [18,"int64"],
+      "IntelligenceWeight": [14,"int64"],
+      "IsLock": [31,"bool"],
+      "LastFoodCountResetDatetime": [30,"int64"],
+      "LimitRankType": [7,"enum"],
+      "Name": [11,"string"],
+      "RankType": [6,"enum"],
+      "RankUpTotalAdaptability": [23,"int64"],
+      "RankUpTotalIntelligence": [22,"int64"],
+      "RankUpTotalSpeed": [20,"int64"],
+      "RankUpTotalStamina": [21,"int64"],
+      "SexType": [10,"enum"],
+      "Speed": [16,"int64"],
+      "SpeedWeight": [12,"int64"],
+      "Stamina": [17,"int64"],
+      "StaminaWeight": [13,"int64"],
+      "TotalFeedCount": [29,"int64"],
+      "UserChocoboId": [2,"int64"],
+      "UserId": [1,"int64"]
+    },
+    "UserChocoboEventFarm": {
+      "ChocoboEventFarmTermId": [2,"int64"],
+      "LastOpenTreasureDatetime": [3,"int64"],
+      "UserId": [1,"int64"]
+    },
+    "UserChocoboExpeditionDeck": {
+      "CalcCompleteDatetime": [9,"int64"],
+      "CalcStartDatetime": [7,"int64"],
+      "CharacterId": [5,"int64"],
+      "ChocoboExpeditionDeckId": [2,"int64"],
+      "ChocoboExpeditionId": [4,"int64"],
+      "CompleteDatetime": [8,"int64"],
+      "CurrentLapCount": [10,"int64"],
+      "IsEcPassApplied": [11,"bool"],
+      "LapTimeSec": [12,"int64"],
+      "StartDatetime": [6,"int64"],
+      "UserChocoboId": [3,"int64"],
+      "UserId": [1,"int64"]
+    },
+    "UserChocoboExpeditionGroup": {
+      "ChocoboExpeditionGroupId": [2,"int64"],
+      "CollectionRewardIdxFlags0": [3,"int64"],
+      "CollectionRewardIdxFlags1": [4,"int64"],
+      "UserId": [1,"int64"]
+    },
+    "UserChocoboExpeditionShorten": {
+      "LastShortenDatetime": [3,"int64"],
+      "ShortenCount": [2,"int64"],
+      "UserId": [1,"int64"]
+    },
+    "UserChocoboFarm": {
+      "LastOpenTreasureDatetime": [2,"int64"],
+      "UserId": [1,"int64"]
+    },
+    "UserComeback": {
+      "ComebackDatetime": [3,"int64"],
+      "ComebackId": [2,"int64"],
+      "PreviousComebackDatetime": [4,"int64"],
+      "ResetComebackDatetime": [5,"int64"],
+      "UserId": [1,"int64"]
+    },
+    "UserCraft": {
+      "CalcCompleteDatetime": [8,"int64"],
+      "CompleteDatetime": [7,"int64"],
+      "CraftType": [4,"enum"],
+      "Idx": [2,"int64"],
+      "IsEcPassApplied": [9,"bool"],
+      "IsEmpty": [5,"bool"],
+      "StartDatetime": [6,"int64"],
+      "TotalStartCount": [3,"int64"],
+      "UserId": [1,"int64"]
+    },
+    "UserCraftOptionItem": {
+      "Count": [4,"int64"],
+      "Idx": [2,"int64"],
+      "ItemId": [3,"int64"],
+      "UserId": [1,"int64"]
+    },
+    "UserDailyQuest": {
+      "DailyQuestId": [2,"int64"],
+      "RemainWinCount": [3,"int64"],
+      "TotalRemainWinCount": [4,"int64"],
+      "UserId": [1,"int64"]
+    },
+    "UserDailyQuestEntry": {
+      "DailyQuestId": [2,"int64"],
+      "EntryDatetime": [3,"int64"],
+      "PartyId": [4,"int64"],
+      "UserId": [1,"int64"]
+    },
+    "UserDailyQuestSetting": {
+      "DailyQuestType": [2,"enum"],
+      "TargetId0": [3,"int64"],
+      "TargetId1": [4,"int64"],
+      "TargetId2": [5,"int64"],
+      "TargetId3": [6,"int64"],
+      "TargetId4": [7,"int64"],
+      "UserId": [1,"int64"]
+    },
+    "UserDailyRewardGroup": {
+      "DailyRewardGroupId": [2,"int64"],
+      "FinishDatetime": [6,"int64"],
+      "LastObtainDatetime": [4,"int64"],
+      "MessageDetailValue0": [5,"int64"],
+      "StartDatetime": [3,"int64"],
+      "UserId": [1,"int64"]
+    },
+    "UserDamageChallengeBattle": {
+      "DamageChallengeBattleId": [2,"int64"],
+      "HighScore": [3,"int64"],
+      "LastUpdateScoreDatetime": [5,"int64"],
+      "TotalEntryCount": [6,"int64"],
+      "UserId": [1,"int64"]
+    },
+    "UserDungeonDramaSelection": {
+      "DungeonDramaSelectionId": [2,"int64"],
+      "SelectedIdxFlag": [4,"int64"],
+      "SelectionIdx": [3,"int64"],
+      "UserId": [1,"int64"]
+    },
+    "UserDungeonEntry": {
+      "ChaserEncountCount": [10,"int64"],
+      "ContentId": [6,"int64"],
+      "DungeonId": [5,"int64"],
+      "DungeonProgressType": [7,"enum"],
+      "DungeonResultType": [8,"enum"],
+      "DungeonType": [2,"enum"],
+      "EntryCount": [4,"int64"],
+      "InstantItemInfo": [9,"string"],
+      "PartyId": [3,"int64"],
+      "UserId": [1,"int64"]
+    },
+    "UserDungeonTreasure": {
+      "DungeonTreasureId": [2,"int64"],
+      "EntryCount": [3,"int64"],
+      "IsAfterSave": [4,"bool"],
+      "UserId": [1,"int64"]
+    },
+    "UserDungeonTreasureGroup": {
+      "DungeonTreasureGroupId": [2,"int64"],
+      "EntryCount": [3,"int64"],
+      "IsAfterSave": [4,"bool"],
+      "UserId": [1,"int64"]
+    },
+    "UserDungeonTriggerLock": {
+      "DungeonTriggerLockId": [2,"int64"],
+      "EntryCount": [3,"int64"],
+      "IsAfterSave": [4,"bool"],
+      "UserId": [1,"int64"]
+    },
+    "UserEpisode": {
+      "FreePartyModeClearDatetime": [4,"int64"],
+      "StoryEpisodeId": [2,"int64"],
+      "StoryPartyModeClearDatetime": [3,"int64"],
+      "UserId": [1,"int64"]
+    },
+    "UserEpisodeBattle": {
+      "StoryBattleId": [3,"int64"],
+      "StoryEpisodeId": [2,"int64"],
+      "UserId": [1,"int64"]
+    },
+    "UserEpisodeEntry": {
+      "EpisodeId": [3,"int64"],
+      "PartyId": [2,"int64"],
+      "StoryModeType": [4,"enum"],
+      "UserId": [1,"int64"]
+    },
+    "UserEventBase": {
+      "EventBaseId": [2,"int64"],
+      "LastWinResetDatetime": [4,"int64"],
+      "ResetBattleWinCount": [3,"int64"],
+      "StoryLevelExp": [5,"int64"],
+      "UserId": [1,"int64"]
+    },
+    "UserEventCrisisBattle": {
+      "AddPointBoostStockCount": [11,"int64"],
+      "CurrentCostLimit": [9,"int64"],
+      "EventCrisisBattleId": [2,"int64"],
+      "FinalRank": [7,"int64"],
+      "GroupIdx": [3,"int64"],
+      "HighStageLevel": [5,"int64"],
+      "IsReceivedRankingReward": [6,"bool"],
+      "LastPointBoostRecoveryDatetime": [13,"int64"],
+      "MaxHighScore": [12,"int64"],
+      "PointBoostStockCount": [10,"int64"],
+      "TotalPoint": [4,"int64"],
+      "UserId": [1,"int64"]
+    },
+    "UserEventCrisisBattleSoloBattle": {
+      "BuffDebuffSelectionInfo": [3,"string"],
+      "EventSoloBattleId": [2,"int64"],
+      "HighScoreCharacterId0": [4,"int64"],
+      "HighScoreCharacterId1": [5,"int64"],
+      "HighScoreCharacterId2": [6,"int64"],
+      "IsHighScoreWithMemoria0": [8,"bool"],
+      "LastUpdateHighScoreDatetime": [7,"int64"],
+      "UserId": [1,"int64"]
+    },
+    "UserEventDamageRankingBattleSoloBattle": {
+      "BuffDebuffSelectionInfo": [3,"string"],
+      "EventSoloBattleId": [2,"int64"],
+      "HighScoreCharacterId0": [4,"int64"],
+      "HighScoreCharacterId1": [5,"int64"],
+      "HighScoreCharacterId2": [6,"int64"],
+      "IsHighScoreWithMemoria0": [8,"bool"],
+      "LastUpdateHighScoreDatetime": [7,"int64"],
+      "UserId": [1,"int64"]
+    },
+    "UserEventDramaSelection": {
+      "EventDramaSelectionId": [2,"int64"],
+      "SelectedIdxFlag": [4,"int64"],
+      "SelectionIdx": [3,"int64"],
+      "UserId": [1,"int64"]
+    },
+    "UserEventGuildRankingBase": {
+      "EventBaseId": [2,"int64"],
+      "FinalTotalScoreRank": [10,"int64"],
+      "GuildId": [3,"int64"],
+      "IsAwardCounted": [11,"bool"],
+      "IsFinalResultUserRewardProvided": [5,"bool"],
+      "TicketAddCount": [8,"int64"],
+      "TicketConsumptionCount": [4,"int64"],
+      "TicketConsumptionCountLastResetDatetime": [7,"int64"],
+      "UserId": [1,"int64"]
+    },
+    "UserEventGuildRankingBattle": {
+      "EventGuildRankingBattleId": [2,"int64"],
+      "HighScore": [3,"int64"],
+      "PracticeBattleBestScore": [4,"int64"],
+      "PracticeBattleBestTotalScore": [8,"int64"],
+      "UserId": [1,"int64"]
+    },
+    "UserEventGuildRankingBattleEntry": {
+      "EnemyDefeatCount": [6,"int64"],
+      "EventGuildRankingBattleId": [2,"int64"],
+      "EventGuildRankingBattleType": [3,"enum"],
+      "TotalDamage": [7,"int64"],
+      "UserId": [1,"int64"]
+    },
+    "UserEventIdlingCollect": {
+      "CalcStartDatetime": [5,"int64"],
+      "EventIdlingCollectId": [2,"int64"],
+      "Level": [3,"int64"],
+      "StartDatetime": [4,"int64"],
+      "UserId": [1,"int64"]
+    },
+    "UserEventMemoria": {
+      "ConsumedStaminaCount": [3,"int64"],
+      "EventMemoriaId": [2,"int64"],
+      "TotalConsumedStaminaCount": [4,"int64"],
+      "UserId": [1,"int64"]
+    },
+    "UserEventMultiBattle": {
+      "ChallengeCount": [5,"int64"],
+      "EventMultiBattleId": [2,"int64"],
+      "HighRankType": [4,"enum"],
+      "HighScore": [3,"int64"],
+      "LastChallengeResetDatetime": [6,"int64"],
+      "TotalWinCount": [7,"int64"],
+      "UserId": [1,"int64"]
+    },
+    "UserEventScenarioEpisode": {
+      "ClearCount": [3,"int64"],
+      "EventScenarioEpisodeId": [2,"int64"],
+      "UserId": [1,"int64"]
+    },
+    "UserEventScoreDungeonEntry": {
+      "EventScoreDungeonId": [2,"int64"],
+      "FinalRank": [6,"int64"],
+      "GroupIdx": [3,"int64"],
+      "IsReceivedRankingReward": [4,"bool"],
+      "ReceivedScoreRewardIdxFlag": [5,"int64"],
+      "UserId": [1,"int64"]
+    },
+    "UserEventSoloBattle": {
+      "ChallengeCount": [5,"int64"],
+      "EventSoloBattleId": [2,"int64"],
+      "HighRankType": [4,"enum"],
+      "HighScore": [3,"int64"],
+      "LastChallengeResetDatetime": [6,"int64"],
+      "LibraCardId0": [9,"int64"],
+      "LibraCardId1": [10,"int64"],
+      "LibraCardId2": [11,"int64"],
+      "LibraCardLotResetCount": [13,"int64"],
+      "SelectedLibraCardId": [12,"int64"],
+      "TotalWinCount": [7,"int64"],
+      "UserId": [1,"int64"]
+    },
+    "UserFirstMeeting": {
+      "Count": [3,"int64"],
+      "LastResetDatetime": [4,"int64"],
+      "UserId": [1,"int64"]
+    },
+    "UserGachaStampSheetCellChoiceGroup": {
+      "GachaStampSheetCellChoiceGroupId": [2,"int64"],
+      "GachaStampSheetCellChoiceId": [3,"int64"],
+      "UserId": [1,"int64"]
+    },
+    "UserGachaStampSheetGroup": {
+      "CompleteSheetCount": [5,"int64"],
+      "GachaStampSheetGroupId": [2,"int64"],
+      "GachaStampSheetGroupRelSeq": [3,"int64"],
+      "StampCount": [4,"int64"],
+      "TotalStampCount": [6,"int64"],
+      "UserId": [1,"int64"]
+    },
+    "UserGachaStepGroup": {
+      "ExecCount": [4,"int64"],
+      "GachaStepGroupId": [2,"int64"],
+      "LastExecDatetime": [5,"int64"],
+      "TotalDrawCount": [6,"int64"],
+      "TotalExecCount": [3,"int64"],
+      "UserId": [1,"int64"]
+    },
+    "UserGachaWishChoice": {
+      "GachaWishChoiceId": [2,"int64"],
+      "UserId": [1,"int64"],
+      "WeaponId": [3,"int64"]
+    },
+    "UserGrowthBoardGroup": {
+      "GroupIdxFlags0": [3,"int64"],
+      "GroupIdxFlags1": [4,"int64"],
+      "GrowthBoardGroupId": [2,"int64"],
+      "UserId": [1,"int64"]
+    },
+    "UserGuildBase": {
+      "GuildId": [2,"int64"],
+      "LeaveDatetime": [3,"int64"],
+      "LeaveLastResetDatetime": [7,"int64"],
+      "ResettableLeaveCount": [5,"int64"],
+      "TotalLeaveCount": [6,"int64"],
+      "UserGuildStatusType": [4,"enum"],
+      "UserId": [1,"int64"]
+    },
+    "UserGuildBonus": {
+      "GuildBonusId": [2,"int64"],
+      "Level": [3,"int64"],
+      "UserId": [1,"int64"]
+    },
+    "UserGuildPlayRecord": {
+      "GuildPlayRecordType": [2,"enum"],
+      "UserId": [1,"int64"],
+      "Value": [3,"int64"]
+    },
+    "UserHighwind": {
+      "IdlingStartDatetime": [2,"int64"],
+      "TotalIdlingCollectCount": [3,"int64"],
+      "UserId": [1,"int64"]
+    },
+    "UserHighwindBattle": {
+      "HighwindBattleId": [2,"int64"],
+      "LastChallengeUserHighwindBattleReleaseId": [4,"int64"],
+      "UserId": [1,"int64"],
+      "WinCount": [3,"int64"]
+    },
+    "UserHighwindBattleRelease": {
+      "HighwindBattleId": [3,"int64"],
+      "ReleaseEndDatetime": [5,"int64"],
+      "ReleaseStartDatetime": [4,"int64"],
+      "UserHighwindBattleReleaseId": [2,"int64"],
+      "UserId": [1,"int64"]
+    },
+    "UserHighwindKeyItem": {
+      "GetDatetime": [3,"int64"],
+      "HighwindKeyItemId": [2,"int64"],
+      "RankUpgradeType": [4,"enum"],
+      "UpgradeCount": [5,"int64"],
+      "UserId": [1,"int64"]
+    },
+    "UserHighwindKeyItemEffectGroup": {
+      "HighwindKeyItemEffectGroupId": [2,"int64"],
+      "ReceivedHighwindKeyItemEffectGroupIdxFlags0": [3,"int64"],
+      "ReceivedHighwindKeyItemEffectGroupIdxFlags1": [4,"int64"],
+      "ReceivedHighwindKeyItemEffectGroupIdxFlags10": [13,"int64"],
+      "ReceivedHighwindKeyItemEffectGroupIdxFlags11": [14,"int64"],
+      "ReceivedHighwindKeyItemEffectGroupIdxFlags12": [15,"int64"],
+      "ReceivedHighwindKeyItemEffectGroupIdxFlags13": [16,"int64"],
+      "ReceivedHighwindKeyItemEffectGroupIdxFlags14": [17,"int64"],
+      "ReceivedHighwindKeyItemEffectGroupIdxFlags15": [18,"int64"],
+      "ReceivedHighwindKeyItemEffectGroupIdxFlags16": [19,"int64"],
+      "ReceivedHighwindKeyItemEffectGroupIdxFlags17": [20,"int64"],
+      "ReceivedHighwindKeyItemEffectGroupIdxFlags18": [21,"int64"],
+      "ReceivedHighwindKeyItemEffectGroupIdxFlags19": [22,"int64"],
+      "ReceivedHighwindKeyItemEffectGroupIdxFlags2": [5,"int64"],
+      "ReceivedHighwindKeyItemEffectGroupIdxFlags3": [6,"int64"],
+      "ReceivedHighwindKeyItemEffectGroupIdxFlags4": [7,"int64"],
+      "ReceivedHighwindKeyItemEffectGroupIdxFlags5": [8,"int64"],
+      "ReceivedHighwindKeyItemEffectGroupIdxFlags6": [9,"int64"],
+      "ReceivedHighwindKeyItemEffectGroupIdxFlags7": [10,"int64"],
+      "ReceivedHighwindKeyItemEffectGroupIdxFlags8": [11,"int64"],
+      "ReceivedHighwindKeyItemEffectGroupIdxFlags9": [12,"int64"],
+      "UserId": [1,"int64"]
+    },
+    "UserHighwindParts": {
+      "HighwindPartsId": [2,"int64"],
+      "Level": [3,"int64"],
+      "UserId": [1,"int64"]
+    },
+    "UserHomeBackground": {
+      "HomeBackgroundId": [2,"int64"],
+      "UserId": [1,"int64"]
+    },
+    "UserHomeBackgroundSetting": {
+      "HomeBackgroundId0": [3,"int64"],
+      "HomeBackgroundId1": [4,"int64"],
+      "HomeBackgroundId2": [5,"int64"],
+      "HomeBackgroundId3": [6,"int64"],
+      "IsRandom": [2,"bool"],
+      "UserId": [1,"int64"]
+    },
+    "UserHonor": {
+      "GetDatetime": [3,"int64"],
+      "HonorId": [2,"int64"],
+      "UserId": [1,"int64"]
+    },
+    "UserItem": {
+      "ConsumptionCount": [7,"int64"],
+      "Count": [3,"int64"],
+      "GetDatetime": [10,"int64"],
+      "ItemId": [2,"int64"],
+      "LastConsumptionResetDatetime": [9,"int64"],
+      "LastGetDatetime": [11,"int64"],
+      "LastObtainResetDatetime": [6,"int64"],
+      "ObtainCount": [4,"int64"],
+      "TotalConsumptionCount": [8,"int64"],
+      "TotalObtainCount": [5,"int64"],
+      "UserId": [1,"int64"]
+    },
+    "UserLimitedRelease": {
+      "LimitedReleaseId": [2,"int64"],
+      "ReleaseStartDatetime": [3,"int64"],
+      "UserId": [1,"int64"]
+    },
+    "UserListInfo": {
+      "AwardInfoList": [10,"AwardInfo",true],
+      "BackgroundHonorId": [6,"int64"],
+      "BottomHonorId": [5,"int64"],
+      "CombatPower": [9,"int64"],
+      "DisplayUserId": [1,"string"],
+      "IconHonorId": [7,"int64"],
+      "LastAccessDatetime": [8,"int64"],
+      "PlayerName": [2,"string"],
+      "TopHonorId": [4,"int64"],
+      "UserRank": [3,"int64"]
+    },
+    "UserLoginBonus": {
+      "LastGetDate": [6,"int64"],
+      "LoginBonusId": [2,"int64"],
+      "LoginCount": [4,"int64"],
+      "SheetCount": [3,"int64"],
+      "TotalLoginCount": [5,"int64"],
+      "UserId": [1,"int64"]
+    },
+    "UserMaintenanceExtension": {
+      "ExtensionDatetime": [2,"int64"],
+      "UserId": [1,"int64"]
+    },
+    "UserMateria": {
+      "EvolveCount": [5,"int64"],
+      "Exp": [7,"int64"],
+      "GetDatetime": [9,"int64"],
+      "IsLock": [8,"bool"],
+      "MateriaId": [3,"int64"],
+      "NotesSetId": [6,"int64"],
+      "ParameterId0": [11,"int64"],
+      "ParameterId1": [12,"int64"],
+      "ParameterId2": [13,"int64"],
+      "ParameterId3": [14,"int64"],
+      "ParameterOpenCount": [10,"int64"],
+      "ParameterValue0": [15,"int64"],
+      "ParameterValue1": [16,"int64"],
+      "ParameterValue2": [17,"int64"],
+      "ParameterValue3": [18,"int64"],
+      "QualityType": [4,"enum"],
+      "UserId": [1,"int64"],
+      "UserMateriaId": [2,"int64"]
+    },
+    "UserMateriaCollection": {
+      "EnhanceCount": [13,"int64"],
+      "MateriaEvolveId": [2,"int64"],
+      "MaxLevel": [14,"int64"],
+      "QualityFiveCraftCount": [12,"int64"],
+      "QualityFiveObtainCount": [7,"int64"],
+      "QualityFourCraftCount": [11,"int64"],
+      "QualityFourObtainCount": [6,"int64"],
+      "QualityOneCraftCount": [8,"int64"],
+      "QualityOneObtainCount": [3,"int64"],
+      "QualityThreeCraftCount": [10,"int64"],
+      "QualityThreeObtainCount": [5,"int64"],
+      "QualityTwoCraftCount": [9,"int64"],
+      "QualityTwoObtainCount": [4,"int64"],
+      "UserId": [1,"int64"]
+    },
+    "UserMateriaCraft": {
+      "Idx": [2,"int64"],
+      "MateriaId": [4,"int64"],
+      "MateriaRecipeId": [3,"int64"],
+      "NotesSetId": [6,"int64"],
+      "OptionItemInfo": [16,"string"],
+      "ParameterOpenCount": [7,"int64"],
+      "QualityType": [5,"enum"],
+      "UserId": [1,"int64"]
+    },
+    "UserMateriaRecipe": {
+      "CraftCount": [3,"int64"],
+      "MateriaRecipeId": [2,"int64"],
+      "UserId": [1,"int64"]
+    },
+    "UserMemoria": {
+      "AnalysisPoint": [4,"int64"],
+      "EquipableDatetime": [6,"int64"],
+      "FragmentCount": [3,"int64"],
+      "FragmentFirstGetDatetime": [5,"int64"],
+      "MemoriaId": [2,"int64"],
+      "UserId": [1,"int64"]
+    },
+    "UserMemoriaInfo": {
+      "AnalysisLevel": [2,"int64"],
+      "AnalysisPoint": [1,"int64"]
+    },
+    "UserMission": {
+      "MissionId": [2,"int64"],
+      "NotifiedProgressCount": [5,"int64"],
+      "ProgressCount": [3,"int64"],
+      "ReceivedProgressCount": [4,"int64"],
+      "UserId": [1,"int64"]
+    },
+    "UserMissionGroup": {
+      "BonusPoint": [3,"int64"],
+      "IsReceivedSpecialMission": [12,"bool"],
+      "LastResetDatetime": [10,"int64"],
+      "MissionGroupId": [2,"int64"],
+      "ReceivedExtraMissionBonusIdxFlags0": [8,"int64"],
+      "ReceivedExtraMissionBonusIdxFlags1": [9,"int64"],
+      "ReceivedMissionBonusIdxFlags0": [4,"int64"],
+      "ReceivedMissionBonusIdxFlags1": [5,"int64"],
+      "ReceivedMissionBonusIdxFlags2": [6,"int64"],
+      "ReceivedMissionBonusIdxFlags3": [7,"int64"],
+      "UserId": [1,"int64"]
+    },
+    "UserMissionSet": {
+      "AchievedMissionSetIdxFlags0": [3,"int64"],
+      "AchievedMissionSetIdxFlags1": [4,"int64"],
+      "AchievedMissionSetIdxFlags2": [5,"int64"],
+      "AchievedMissionSetIdxFlags3": [6,"int64"],
+      "MissionSetId": [2,"int64"],
+      "NotifiedMissionSetIdxFlags0": [11,"int64"],
+      "NotifiedMissionSetIdxFlags1": [12,"int64"],
+      "NotifiedMissionSetIdxFlags2": [13,"int64"],
+      "NotifiedMissionSetIdxFlags3": [14,"int64"],
+      "ReceivedMissionSetIdxFlags0": [7,"int64"],
+      "ReceivedMissionSetIdxFlags1": [8,"int64"],
+      "ReceivedMissionSetIdxFlags2": [9,"int64"],
+      "ReceivedMissionSetIdxFlags3": [10,"int64"],
+      "UserId": [1,"int64"]
+    },
+    "UserMissionSpecialSummon": {
+      "LastChangeMissionDatetime": [3,"int64"],
+      "MissionGroupId": [2,"int64"],
+      "UserId": [1,"int64"]
+    },
+    "UserMultiAreaBattle": {
+      "HighRankType": [8,"enum"],
+      "HighScore": [7,"int64"],
+      "LastWinResetDatetime": [5,"int64"],
+      "MultiAreaBattleId": [2,"int64"],
+      "ResetWinCount": [4,"int64"],
+      "TotalEntryCount": [3,"int64"],
+      "TotalWinCount": [6,"int64"],
+      "UserId": [1,"int64"]
+    },
+    "UserMultiBattleEntry": {
+      "CharacterId": [2,"int64"],
+      "PartyMemberId": [3,"int64"],
+      "UserId": [1,"int64"]
+    },
+    "UserOtherInfo": {
+      "HasGift": [3,"bool"],
+      "IsCombatPowerRefresh": [4,"bool"],
+      "MissionAchievedList": [2,"MissionAchieved",true],
+      "UserStoneList": [1,"UserStone",true]
+    },
+    "UserParty": {
+      "CombatPower": [4,"int64"],
+      "IsActive": [6,"bool"],
+      "IsLock": [5,"bool"],
+      "MemoriaId0": [7,"int64"],
+      "Name": [3,"string"],
+      "PartyId": [2,"int64"],
+      "UserId": [1,"int64"]
+    },
+    "UserPartyArmoury": {
+      "IsActive": [5,"bool"],
+      "PartyArmouryId": [2,"int64"],
+      "PartyArmouryType": [3,"enum"],
+      "TargetId": [4,"int64"],
+      "UserId": [1,"int64"]
+    },
+    "UserPartyMember": {
+      "AccessoryId0": [14,"int64"],
+      "AccessoryId1": [15,"int64"],
+      "ActiveMateriaId0": [7,"int64"],
+      "ActiveMateriaId1": [8,"int64"],
+      "ActiveMateriaId2": [9,"int64"],
+      "CharacterId": [5,"int64"],
+      "CombatPower": [20,"int64"],
+      "CostumeId": [17,"int64"],
+      "DisplayCostumeId": [19,"int64"],
+      "DisplayWeaponId": [18,"int64"],
+      "Idx": [3,"int64"],
+      "IsActive": [21,"bool"],
+      "IsCostumeSkillActive": [26,"bool"],
+      "IsSeparate": [23,"bool"],
+      "LegendaryWeaponId0": [24,"int64"],
+      "OveraccelSkillId": [25,"int64"],
+      "PartyMemberId": [2,"int64"],
+      "PartyRoleType": [4,"enum"],
+      "SpecialSkillId": [16,"int64"],
+      "SubCostumeId0": [27,"int64"],
+      "SubCostumeId1": [28,"int64"],
+      "SubWeaponId0": [11,"int64"],
+      "SubWeaponId1": [12,"int64"],
+      "SubWeaponId2": [13,"int64"],
+      "UpdatedDatetime": [22,"int64"],
+      "UserId": [1,"int64"],
+      "WeaponId0": [6,"int64"],
+      "WeaponId1": [10,"int64"]
+    },
+    "UserPlayRecord": {
+      "DateValue": [5,"int64"],
+      "IntValue": [4,"int64"],
+      "PlayRecordType": [2,"enum"],
+      "StrValue": [3,"string"],
+      "UserId": [1,"int64"]
+    },
+    "UserProfile": {
+      "BackgroundHonorId": [6,"int64"],
+      "BottomHonorId": [5,"int64"],
+      "IconHonorId": [7,"int64"],
+      "IsShowCharacterRank": [8,"bool"],
+      "Message": [3,"string"],
+      "Name": [2,"string"],
+      "TopHonorId": [4,"int64"],
+      "UserId": [1,"int64"]
+    },
+    "UserRecoveryStone": {
+      "LastResetDatetime": [5,"int64"],
+      "RecoveryCount": [3,"int64"],
+      "RecoveryStoneId": [2,"int64"],
+      "TotalRecoveryCount": [4,"int64"],
+      "UserId": [1,"int64"]
+    },
+    "UserSeasonPass": {
+      "ExtraReceivedStepIdxFlags0": [6,"int64"],
+      "ExtraReceivedStepIdxFlags1": [7,"int64"],
+      "ExtraReceivedStepIdxFlags2": [8,"int64"],
+      "ExtraReceivedStepIdxFlags3": [9,"int64"],
+      "ProgressPoint": [3,"int64"],
+      "ReceivedStepIdxFlags0": [4,"int64"],
+      "ReceivedStepIdxFlags1": [5,"int64"],
+      "SeasonPassId": [2,"int64"],
+      "UserId": [1,"int64"]
+    },
+    "UserSetting": {
+      "SettingType": [2,"enum"],
+      "UserId": [1,"int64"],
+      "Value": [3,"string"]
+    },
+    "UserShop": {
+      "CampaignLineupResetCount": [5,"int64"],
+      "LastResetDatetime": [3,"int64"],
+      "LineupResetCount": [4,"int64"],
+      "ShopId": [2,"int64"],
+      "UserId": [1,"int64"]
+    },
+    "UserShopItem": {
+      "LastPurchaseDatetime": [5,"int64"],
+      "PurchaseCount": [3,"int64"],
+      "ShopItemId": [2,"int64"],
+      "TotalPurchaseCount": [4,"int64"],
+      "UserId": [1,"int64"]
+    },
+    "UserShopItemLineup": {
+      "Idx": [3,"int64"],
+      "PurchaseCount": [4,"int64"],
+      "ShopId": [2,"int64"],
+      "ShopItemId": [5,"int64"],
+      "UserId": [1,"int64"]
+    },
+    "UserSkillOveraccel": {
+      "OveraccelSkillId": [2,"int64"],
+      "UserId": [1,"int64"]
+    },
+    "UserSkillSpecial": {
+      "SpecialSkillId": [2,"int64"],
+      "UserId": [1,"int64"]
+    },
+    "UserSoloArea": {
+      "LastWinResetDatetime": [4,"int64"],
+      "ResetWinCount": [3,"int64"],
+      "SoloAreaId": [2,"int64"],
+      "TotalWinCount": [5,"int64"],
+      "UserId": [1,"int64"]
+    },
+    "UserSoloAreaBattle": {
+      "HighRankType": [8,"enum"],
+      "HighScore": [7,"int64"],
+      "LastWinResetDatetime": [5,"int64"],
+      "ResetWinCount": [4,"int64"],
+      "SoloAreaBattleId": [2,"int64"],
+      "TotalEntryCount": [3,"int64"],
+      "TotalWinCount": [6,"int64"],
+      "UserId": [1,"int64"]
+    },
+    "UserSoloAreaGroupCategory": {
+      "LastWinResetDatetime": [4,"int64"],
+      "ResetWinCount": [3,"int64"],
+      "SoloAreaGroupCategoryId": [2,"int64"],
+      "UserId": [1,"int64"]
+    },
+    "UserStatus": {
+      "Exp": [2,"int64"],
+      "StaminaCount": [3,"int64"],
+      "StaminaLastRecoveredDatetime": [4,"int64"],
+      "UserId": [1,"int64"]
+    },
+    "UserSteamAchievement": {
+      "AchievementDatetime": [3,"int64"],
+      "SteamAchievementId": [2,"int64"],
+      "UserId": [1,"int64"]
+    },
+    "UserStone": {
+      "Count": [3,"int64"],
+      "StoneId": [2,"int64"],
+      "UserId": [1,"int64"]
+    },
+    "UserStoryDramaSelection": {
+      "SelectionId": [2,"int64"],
+      "SelectionIdx": [3,"int64"],
+      "UserId": [1,"int64"]
+    },
+    "UserSummon": {
+      "SummonId": [2,"int64"],
+      "UserId": [1,"int64"]
+    },
+    "UserTime": {
+      "Datetime": [3,"int64"],
+      "UserId": [1,"int64"],
+      "UserTimeType": [2,"enum"]
+    },
+    "UserTower": {
+      "ClearFloorSeq": [3,"int64"],
+      "TowerId": [2,"int64"],
+      "UserId": [1,"int64"]
+    },
+    "UserTutorialStep": {
+      "CurrentStep": [3,"int64"],
+      "TutorialStepType": [2,"enum"],
+      "UserId": [1,"int64"]
+    },
+    "UserWeapon": {
+      "EnhanceCount": [12,"int64"],
+      "EvolveFlags0": [19,"int64"],
+      "Exp": [7,"int64"],
+      "GetDatetime": [8,"int64"],
+      "LegendaryCount": [15,"int64"],
+      "ObtainCountFromGacha": [14,"int64"],
+      "RCount": [9,"int64"],
+      "RarityType": [3,"enum"],
+      "RarityUpCount": [13,"int64"],
+      "ReleaseCount": [6,"int64"],
+      "SrCount": [10,"int64"],
+      "SsrCount": [11,"int64"],
+      "UpgradeCount": [5,"int64"],
+      "UserId": [1,"int64"],
+      "WeaponAttachmentEffectId0": [16,"int64"],
+      "WeaponAttachmentEffectId1": [17,"int64"],
+      "WeaponAttachmentEffectId2": [18,"int64"],
+      "WeaponEvolveType": [20,"enum"],
+      "WeaponId": [2,"int64"],
+      "WeaponUpgradeType": [4,"enum"]
+    },
+    "UserWeaponAttachmentEffectSelecting": {
+      "UserId": [1,"int64"],
+      "WeaponAttachmentItem": [3,"string"],
+      "WeaponId": [2,"int64"]
+    },
+    "WeaponOption": {
+      "LastLevel": [8,"int64"],
+      "LastRarityType": [4,"enum"],
+      "LastUpgradeCount": [10,"int64"],
+      "LastWeaponUpgradeType": [9,"enum"],
+      "Level": [5,"int64"],
+      "MedalCount": [3,"int64"],
+      "ProvidingWeaponList": [11,"ProvidingWeapon",true],
+      "RarityType": [1,"enum"],
+      "UpgradeCount": [7,"int64"],
+      "WeaponGetType": [2,"enum"],
+      "WeaponUpgradeType": [6,"enum"]
+    }
+  }
+}
