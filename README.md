@@ -214,10 +214,14 @@ private storage, import, writable-overlay handling, and offline validation, see
 before importing; no capture paths or session variables need to be copied
 between terminal windows.
 
-For an account refresh, just continue to Home until it has loaded, then exit
-the game. Browsing other screens is optional and captures extra endpoint coverage;
-the finish script verifies the fresh title account snapshot before importing.
-A Home-only capture does not guarantee replay coverage for every other screen.
+For the capture checklist, continue to Home until it has loaded, then open the
+co-op party screen and wait for it to load before exiting the game. Home alone
+refreshes the title account snapshot, but does not establish co-op party coverage:
+offline testing of a Home-only capture encountered a missing
+`POST /api/pvt/notice/check` response when opening co-op party. Browsing other
+screens is optional and captures extra endpoint coverage. The finish script
+verifies the fresh title account snapshot before importing; separately validate
+Home and co-op party offline and check for new replay gaps.
 
 ```powershell
 python tools\export_capture_store.py path\to\capture.mitm --out captures

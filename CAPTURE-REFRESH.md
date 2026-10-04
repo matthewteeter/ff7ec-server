@@ -155,26 +155,31 @@ Do not assume the hook message alone means that the account was captured.
 If `/api/pvt/user/title` is absent in mitmdump, use the reliable routing
 method on the next attempt.
 
-## 5. Reach Home
+## 5. Reach Home and open the co-op party screen
 
-Continue from the title screen until Home has loaded, then exit FF7EC normally.
-**Reaching Home is sufficient to refresh the account snapshot; browsing other
-screens is not required.** The `POST /api/pvt/user/title` response contains the
-large account snapshot. Step 6 verifies that it was successfully captured before
-importing.
+Continue from the title screen until Home has loaded, then **open the co-op
+party screen and wait for it to finish loading before exiting FF7EC normally**.
+Include both screens in the capture checklist for Home and co-op party replay.
+
+Reaching Home alone is sufficient to refresh the account snapshot: the
+`POST /api/pvt/user/title` response contains the large account snapshot, and
+step 6 verifies that it was successfully captured before importing. It is
+**not sufficient to establish co-op party endpoint coverage**. During offline
+validation of a Home-only capture, opening co-op party encountered a missing
+`POST /api/pvt/notice/check` response and the game displayed an error.
 
 Optionally, browse additional screens before exiting if you want to extend
 replay coverage for endpoints loaded only by those screens. Useful coverage includes:
 
 - Characters, weapons, inventory, and Growth
-- Solo and co-op parties
+- Solo parties
 - Missions, gifts, notices, and season-pass screens
 - Story, events, expeditions, and guild
 - Shop and other menus that load data lazily
 
-This optional browsing extends endpoint coverage, not the requirement for
-refreshing the title account snapshot. A Home-only capture does not guarantee
-that every other screen can be replayed. Avoid
+Opening co-op party and optionally browsing other screens extends endpoint
+coverage beyond the title account snapshot. Even a Home-and-co-op capture does
+not guarantee that every other screen can be replayed. Avoid
 purchases, currency spending, reward claims, or other unwanted state-changing
 actions.
 
@@ -240,7 +245,8 @@ Start offline mode and launch the game:
 .\launcher\Start-Ff7ecOffline.ps1 -LaunchGame
 ```
 
-Continue to Home and compare the account data there. If you also captured
+Continue to Home and compare the account data there, then open the co-op
+party screen and confirm it loads without an error. If you also captured
 additional screens, optionally browse them to check their replay coverage.
 Inspect:
 
@@ -253,6 +259,10 @@ matched a replay record; it does **not** prove that the record is new. Check
 the title snapshot's `capturedAt` value, and compare the actual crystals and
 costumes visible in the client. A gap identifies an endpoint that must be
 exercised during another live capture.
+
+The finish script checks account-snapshot freshness, not complete endpoint
+coverage. A successful import is not proof that co-op party or other screens
+work; their offline validation must also succeed without new replay gaps.
 
 When validation is complete:
 
