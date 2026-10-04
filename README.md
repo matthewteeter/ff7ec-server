@@ -86,7 +86,8 @@ no code changes needed for that.
 ## Layout
 
 ```
-Ff7ec.Server.sln
+Ff7ec.Server.slnx
+src/Ff7ec.Octo/         - shared Octo manifest encryption/decryption
 src/Ff7ec.Server/       - the replay server (see Program.cs)
 tools/export_capture_store.py  - .mitm -> captures/ importer
 tools/mitm_ff7ec_addon.py - code-only capture add-on (no embedded account data or keys)
@@ -109,6 +110,14 @@ are not force-added.
 A clone of the source repository will therefore not contain a playable account snapshot;
 each user must privately import their own capture and let the server generate local
 certificates.
+
+`src\Ff7ec.Octo` preserves the existing game-wide manifest app key and IV seed,
+not account credentials or TLS private keys. Both the server and asset-override
+tool use this in-repository project; no CostumeViewer checkout or live service is
+needed for manifest encryption/decryption. The library supports the encrypted
+AES-with-MD5 SecureFile format used by the override tool's manifest backups and
+retains the server's raw SecureFile reading support. The override tool still
+requires encrypted manifests.
 
 ## Running it
 
