@@ -25,6 +25,33 @@ That is the account snapshot the offline server uses for characters, costumes,
 crystals, and other account state. An empty `gaps/` directory is not proof of
 freshness: old responses can still satisfy every request.
 
+## Prerequisites for a fresh clone
+
+Install Python 3.12 or newer and the Steam FF7EC client. From the repository
+root, create an isolated capture environment and generate its local CA:
+
+```powershell
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install mitmproxy
+python -c "from pathlib import Path; from mitmproxy.certs import CertStore; CertStore.from_store(Path.home() / '.mitmproxy', 'mitmproxy', 2048)"
+```
+
+Activate `.\.venv\Scripts\Activate.ps1` in every regular PowerShell window used
+for capture or import so `python` and `mitmdump` are on PATH. Generate the CA
+only for your own installation; step 2 explicitly trusts it. Raw captures,
+CA private keys, and the virtual environment must not be committed.
+
+A fresh clone has no `captures` directory. Create an empty replay-store
+directory before starting the first capture:
+
+```powershell
+New-Item -ItemType Directory -Path .\captures -Force | Out-Null
+```
+
+The start script backs up that empty store to `replay-store-before`; the
+verified import in step 6 populates it with captured responses.
+
 ## 1. Stop offline mode
 
 Close FF7EC, the replay-server window, and any old mitmdump window. If the
@@ -128,13 +155,16 @@ Do not assume the hook message alone means that the account was captured.
 If `/api/pvt/user/title` is absent in mitmdump, use the reliable routing
 method on the next attempt.
 
-## 5. Exercise the live account
+## 5. Reach Home
 
-At minimum, continue from the title screen to Home. The
-`POST /api/pvt/user/title` response contains the large account snapshot.
+Continue from the title screen until Home has loaded, then exit FF7EC normally.
+**Reaching Home is sufficient to refresh the account snapshot; browsing other
+screens is not required.** The `POST /api/pvt/user/title` response contains the
+large account snapshot. Step 6 verifies that it was successfully captured before
+importing.
 
-Visit every screen whose latest server-side data should be retained. Useful
-coverage includes:
+Optionally, browse additional screens before exiting if you want to extend
+replay coverage for endpoints loaded only by those screens. Useful coverage includes:
 
 - Characters, weapons, inventory, and Growth
 - Solo and co-op parties
@@ -142,8 +172,9 @@ coverage includes:
 - Story, events, expeditions, and guild
 - Shop and other menus that load data lazily
 
-Opening Home refreshes a large portion of account state, but visiting
-individual screens captures any additional endpoints they request. Avoid
+This optional browsing extends endpoint coverage, not the requirement for
+refreshing the title account snapshot. A Home-only capture does not guarantee
+that every other screen can be replayed. Avoid
 purchases, currency spending, reward claims, or other unwanted state-changing
 actions.
 
@@ -209,7 +240,9 @@ Start offline mode and launch the game:
 .\launcher\Start-Ff7ecOffline.ps1 -LaunchGame
 ```
 
-Browse the same screens used during capture and inspect:
+Continue to Home and compare the account data there. If you also captured
+additional screens, optionally browse them to check their replay coverage.
+Inspect:
 
 ```text
 .\gaps

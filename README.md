@@ -214,6 +214,11 @@ private storage, import, writable-overlay handling, and offline validation, see
 before importing; no capture paths or session variables need to be copied
 between terminal windows.
 
+For an account refresh, just continue to Home until it has loaded, then exit
+the game. Browsing other screens is optional and captures extra endpoint coverage;
+the finish script verifies the fresh title account snapshot before importing.
+A Home-only capture does not guarantee replay coverage for every other screen.
+
 ```powershell
 python tools\export_capture_store.py path\to\capture.mitm --out captures
 ```
