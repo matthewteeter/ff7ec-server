@@ -20,7 +20,8 @@ internal static class StandaloneChecks
     private const string AssetHost = "resources-data-w6d4k7cz.app.gl.ffviiec.com";
     private const string MasterHost = "client-masterdata-c9ps53g2.app.gl.ffviiec.com";
 
-    public static async Task<int> Run(string root, string snapshot, int rows, string? installedGame = null)
+    public static async Task<int> Run(
+        string root, string snapshot, int rows, string? installedGame = null, string? masterDataBackup = null)
     {
         int checks = 0;
         void Check(bool condition, string message)
@@ -68,10 +69,7 @@ internal static class StandaloneChecks
             string selectedFile = Path.Combine(selectionMaster,
                 selected.MasterCatalogPath[1..].Replace('/', Path.DirectorySeparatorChar));
             byte[] selectedBytes = File.ReadAllBytes(selectedFile);
-            using var catalogAes = Aes.Create();
-            catalogAes.Key = Convert.FromBase64String("ZtV6ceJZqRqChLynCi0GBnl6llNbRoSZoT2QabU+SJA=");
-            byte[] duplicateBytes = EncryptMaster(catalogAes.DecryptCbc(selectedBytes[16..],
-                selectedBytes[..16], PaddingMode.PKCS7));
+            byte[] duplicateBytes = EncryptMaster(DecryptMaster(selectedBytes));
             string duplicateFile = Path.Combine(selectionMaster, "catalogs",
                 LocalGameContentStore.Sha256Name(duplicateBytes) + ".json");
             File.WriteAllBytes(duplicateFile, duplicateBytes);
@@ -83,6 +81,55 @@ internal static class StandaloneChecks
             }
             catch (InvalidDataException) { checks++; }
             File.Delete(duplicateFile);
+            string backup = CreateBackup(Path.Combine(fixtureRoot, "steam-backup"), selectionGame, selected.MasterCatalogPath);
+            var backupHashes = Directory.EnumerateFiles(backup, "*", SearchOption.AllDirectories)
+                .ToDictionary(file => file, file => Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(file))));
+            var backed = new LocalGameContentStore(NullLogger<LocalGameContentStore>.Instance,
+                selectionGame, MasterHost, ManifestHost, AssetHost, required, backup);
+            Check(backed.MasterCatalogPath == selected.MasterCatalogPath, "Backup changed the original encrypted catalog.");
+            Check(backed.TryGet(MasterHost, backed.MasterCatalogPath, out var backedCatalog, out _) &&
+                  backedCatalog.SequenceEqual(selectedBytes), "Backup catalog serving changed ciphertext.");
+            Check(!backed.TryGet(MasterHost, "/GameSave/private.json", out _, out _),
+                "The Steam content backup exposed private save data.");
+            using var textCatalog = JsonDocument.Parse(DecryptMaster(File.ReadAllBytes(
+                Path.Combine(backup, "LocalizeText", "En", "text_catalog.json"))));
+            foreach (var entry in textCatalog.RootElement.GetProperty("files").EnumerateArray())
+            {
+                string path = entry.GetProperty("path").GetString()!;
+                Check(backed.TryGet(MasterHost, path, out var partBytes, out _) &&
+                      LocalGameContentStore.Sha256Name(partBytes) == Path.GetFileNameWithoutExtension(path),
+                    "Backed-up localization did not map plain and master-table filenames.");
+            }
+            foreach (var (file, hash) in backupHashes)
+                Check(Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(file))) == hash,
+                    "Loading backup content modified a source file.");
+            try
+            {
+                _ = new LocalGameContentStore(NullLogger<LocalGameContentStore>.Instance,
+                    selectionGame, MasterHost, ManifestHost, AssetHost, unmatched, backup);
+                throw new InvalidOperationException("A backup missing the required skill was accepted.");
+            }
+            catch (InvalidDataException) { checks++; }
+            string missingPart = Path.Combine(backup, "MasterData", "SkillSpecial.bin");
+            byte[] partBackup = File.ReadAllBytes(missingPart);
+            File.Delete(missingPart);
+            try
+            {
+                _ = new LocalGameContentStore(NullLogger<LocalGameContentStore>.Instance,
+                    selectionGame, MasterHost, ManifestHost, AssetHost, required, backup);
+                throw new InvalidOperationException("A missing backup part fell back to installed starter data.");
+            }
+            catch (FileNotFoundException) { checks++; }
+            File.WriteAllBytes(missingPart, partBackup);
+            partBackup[^1] ^= 0xff;
+            File.WriteAllBytes(missingPart, partBackup);
+            try
+            {
+                _ = new LocalGameContentStore(NullLogger<LocalGameContentStore>.Instance,
+                    selectionGame, MasterHost, ManifestHost, AssetHost, required, backup);
+                throw new InvalidOperationException("A corrupt backed-up part was accepted.");
+            }
+            catch (InvalidDataException) { checks++; }
             selectedBytes[^1] ^= 0xff;
             File.WriteAllBytes(selectedFile, selectedBytes);
             try
@@ -97,16 +144,17 @@ internal static class StandaloneChecks
             AccountExportStore.DefaultProtocolSchemaPath, ApiHost);
         string game = installedGame ?? CreateGame(Path.Combine(fixtureRoot, "game"), account.RequiredMasterIds);
         var content = new LocalGameContentStore(NullLogger<LocalGameContentStore>.Instance,
-            game, MasterHost, ManifestHost, AssetHost, account.RequiredMasterIds);
+            game, MasterHost, ManifestHost, AssetHost, account.RequiredMasterIds, masterDataBackup);
         using var installedIndex = JsonDocument.Parse(File.ReadAllBytes(Path.Combine(game, "FF7EC_Data", "StreamingAssets",
             "MasterData", "index.json")));
         Check((content.MasterCatalogPath != installedIndex.RootElement.GetProperty("master_data_catalog").GetString()) ==
-              (account.RequiredMasterIds.Count > 0),
+              (account.RequiredMasterIds.Count > 0 || masterDataBackup is not null),
             "The incompatible indexed master catalog was selected instead of the account-compatible installed catalog.");
         try
         {
             _ = new LocalGameContentStore(NullLogger<LocalGameContentStore>.Instance, game, MasterHost, ManifestHost,
-                AssetHost, new Dictionary<string, IReadOnlySet<long>> { ["m_skill_special"] = new HashSet<long> { long.MaxValue } });
+                AssetHost, new Dictionary<string, IReadOnlySet<long>> { ["m_skill_special"] = new HashSet<long> { long.MaxValue } },
+                masterDataBackup);
             throw new InvalidOperationException("A missing exported master skill ID was accepted.");
         }
         catch (InvalidDataException) { checks++; }
@@ -226,6 +274,8 @@ internal static class StandaloneChecks
             "--Ff7ec:AccountExport:JsonPath=" + Path.GetFullPath(snapshot),
             "--Ff7ec:AccountExport:ProtocolAssemblyPath=",
         }) start.ArgumentList.Add(argument);
+        if (masterDataBackup is not null)
+            start.ArgumentList.Add("--Ff7ec:Standalone:MasterDataBackupDirectory=" + Path.GetFullPath(masterDataBackup));
 
         // First boot has no captures. Restart adds an invalid file that must never be read.
         await Server(async () =>
@@ -473,7 +523,7 @@ internal static class StandaloneChecks
         File.WriteAllBytes(Path.Combine(cache, md5), bundle);
         string master = Path.Combine(game, "FF7EC_Data", "StreamingAssets", "MasterData");
         string part = Store(EncryptMaster(Encoding.UTF8.GetBytes("fixture-master")), "/assets/fixture/", ".dat");
-        var records = new List<object> { new { table = "fixture", path = part,
+        var records = new List<object> { new { table = "m_fixture", path = part,
             size = new FileInfo(Path.Combine(master, part[1..].Replace('/', Path.DirectorySeparatorChar))).Length } };
         var compatibleRecords = new List<object>(records);
         foreach (var (table, ids) in requiredMasterIds)
@@ -485,7 +535,15 @@ internal static class StandaloneChecks
             "/catalogs/", ".json");
         Store(EncryptMaster(JsonSerializer.SerializeToUtf8Bytes(new { tables = compatibleRecords })),
             "/catalogs/", ".json");
-        string language = Store(EncryptMaster(JsonSerializer.SerializeToUtf8Bytes(new { files = Array.Empty<object>() })),
+        string plainText = Store(EncryptMaster(Encoding.UTF8.GetBytes("fixture-text")), "/language_assets/en/fixture/", ".json");
+        string tableText = Store(EncryptMaster(Encoding.UTF8.GetBytes("fixture-table-text")), "/language_assets/en/table/", ".json");
+        string language = Store(EncryptMaster(JsonSerializer.SerializeToUtf8Bytes(new { files = new[]
+        {
+            new { name = "Agreement", path = plainText, is_table = false,
+                size = new FileInfo(Path.Combine(master, plainText[1..].Replace('/', Path.DirectorySeparatorChar))).Length },
+            new { name = "m_skill_special", path = tableText, is_table = true,
+                size = new FileInfo(Path.Combine(master, tableText[1..].Replace('/', Path.DirectorySeparatorChar))).Length },
+        } })),
             "/language_catalogs/en/", ".json");
         File.WriteAllText(Path.Combine(master, "index.json"), JsonSerializer.Serialize(new Dictionary<string, string>
         {
@@ -524,6 +582,47 @@ internal static class StandaloneChecks
 
     private static byte[] EncryptMaster(byte[] plain) =>
         EncryptAes(plain, Convert.FromBase64String("ZtV6ceJZqRqChLynCi0GBnl6llNbRoSZoT2QabU+SJA="));
+
+    private static byte[] DecryptMaster(byte[] encrypted)
+    {
+        using var aes = Aes.Create();
+        aes.Key = Convert.FromBase64String("ZtV6ceJZqRqChLynCi0GBnl6llNbRoSZoT2QabU+SJA=");
+        return aes.DecryptCbc(encrypted[16..], encrypted[..16], PaddingMode.PKCS7);
+    }
+
+    private static string CreateBackup(string backup, string game, string catalogPath)
+    {
+        string source = Path.Combine(game, "FF7EC_Data", "StreamingAssets", "MasterData");
+        string master = Path.Combine(backup, "MasterData");
+        string language = Path.Combine(backup, "LocalizeText", "En");
+        Directory.CreateDirectory(master);
+        Directory.CreateDirectory(language);
+        byte[] catalogBytes = Read(catalogPath);
+        File.WriteAllBytes(Path.Combine(master, "master_catalog.json"), catalogBytes);
+        using var catalog = JsonDocument.Parse(DecryptMaster(catalogBytes));
+        foreach (var entry in catalog.RootElement.GetProperty("tables").EnumerateArray())
+            File.WriteAllBytes(Path.Combine(master, Name(entry.GetProperty("table").GetString()!) + ".bin"),
+                Read(entry.GetProperty("path").GetString()!));
+        using var index = JsonDocument.Parse(File.ReadAllBytes(Path.Combine(source, "index.json")));
+        byte[] textBytes = Read(index.RootElement.GetProperty("language_catalog_en").GetString()!);
+        File.WriteAllBytes(Path.Combine(language, "text_catalog.json"), textBytes);
+        using var texts = JsonDocument.Parse(DecryptMaster(textBytes));
+        foreach (var entry in texts.RootElement.GetProperty("files").EnumerateArray())
+        {
+            string name = entry.GetProperty("name").GetString()!;
+            if (entry.GetProperty("is_table").GetBoolean()) name = Name(name);
+            File.WriteAllBytes(Path.Combine(language, name + ".json"), Read(entry.GetProperty("path").GetString()!));
+        }
+        Directory.CreateDirectory(Path.Combine(backup, "GameSave"));
+        Directory.CreateDirectory(Path.Combine(backup, "MessagePack"));
+        File.WriteAllText(Path.Combine(backup, "GameSave", "private.json"), "invalid private game save");
+        File.WriteAllText(Path.Combine(backup, "MessagePack", "private.json"), "invalid private data");
+        return backup;
+
+        byte[] Read(string path) => File.ReadAllBytes(Path.Combine(source, path[1..].Replace('/', Path.DirectorySeparatorChar)));
+        static string Name(string table) =>
+            string.Concat(table[2..].Split('_').Select(word => char.ToUpperInvariant(word[0]) + word[1..]));
+    }
 
     private static byte[] Encrypt(int field, byte[] payload)
     {

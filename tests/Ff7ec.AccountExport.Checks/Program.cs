@@ -259,7 +259,11 @@ try
             using var privateJson = JsonDocument.Parse(File.ReadAllBytes(args[0]));
             int privateRows = privateJson.RootElement.GetProperty("AccountInfo").EnumerateObject()
                 .Where(property => property.Value.ValueKind == JsonValueKind.Array).Sum(property => property.Value.GetArrayLength());
-            checks += await StandaloneChecks.Run(root, args[0], privateRows, args[installedGameIndex + 1]);
+            int backupIndex = Array.IndexOf(args, "--masterdata-backup");
+            if (backupIndex >= 0 && backupIndex + 1 >= args.Length)
+                throw new ArgumentException("--masterdata-backup requires a Steam content backup directory.");
+            checks += await StandaloneChecks.Run(root, args[0], privateRows, args[installedGameIndex + 1],
+                backupIndex >= 0 ? args[backupIndex + 1] : null);
         }
     }
     Console.WriteLine($"Passed {checks} account-export checks.");

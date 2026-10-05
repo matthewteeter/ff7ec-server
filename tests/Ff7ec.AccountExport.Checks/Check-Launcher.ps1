@@ -24,8 +24,11 @@ try {
     $assembly = Join-Path $root "protocol ' sample.dll"
     $schema = Join-Path $root "schema ' sample.json"
     $game = Join-Path $root "game ' sample"
+    $backup = Join-Path $root "master backup ' sample"
     New-Item -ItemType Directory -Path (Join-Path $game "octo"),
-        (Join-Path $game "FF7EC_Data\StreamingAssets\MasterData") -Force | Out-Null
+        (Join-Path $game "FF7EC_Data\StreamingAssets\MasterData"),
+        (Join-Path $backup "MasterData"), (Join-Path $backup "LocalizeText\En") -Force | Out-Null
+    "{}" | Set-Content -LiteralPath (Join-Path $backup "MasterData\master_catalog.json")
     "{}" | Set-Content -LiteralPath (Join-Path $game "FF7EC_Data\StreamingAssets\MasterData\index.json")
     "{}" | Set-Content -LiteralPath $json
     "" | Set-Content -LiteralPath $assembly
@@ -35,6 +38,9 @@ try {
         @{ ProtocolAssemblyPath = $assembly },
         @{ Standalone = $true },
         @{ AccountJsonPath = $json; GameDirectory = $game },
+        @{ AccountJsonPath = $json; MasterDataBackupDirectory = $backup },
+        @{ Standalone = $true; AccountJsonPath = $json; GameDirectory = $game; MasterDataBackupDirectory = (Join-Path $root "missing-backup") },
+        @{ Standalone = $true; AccountJsonPath = $json; GameDirectory = $game; MasterDataBackupDirectory = $game },
         @{ Standalone = $true; AccountJsonPath = $json; GameDirectory = (Join-Path $root "missing-game") },
         @{ ProtocolSchemaPath = $schema },
         @{ AccountJsonPath = $json; ProtocolAssemblyPath = $assembly; ProtocolSchemaPath = $schema },
@@ -49,7 +55,8 @@ try {
         @{ AccountJsonPath = $json },
         @{ AccountJsonPath = $json; ProtocolSchemaPath = $schema },
         @{ AccountJsonPath = $json; ProtocolAssemblyPath = $assembly },
-        @{ AccountJsonPath = $json; Standalone = $true; GameDirectory = $game }
+        @{ AccountJsonPath = $json; Standalone = $true; GameDirectory = $game },
+        @{ AccountJsonPath = $json; Standalone = $true; GameDirectory = $game; MasterDataBackupDirectory = $backup }
     )) {
         $global:Ff7ecAccountLauncherCheckCommand = $null
         $global:Ff7ecAccountLauncherOverrideCalls = 0
@@ -80,6 +87,9 @@ try {
                 $global:Ff7ecAccountLauncherCheckCommand -notmatch "Ff7ec__DataDirectory" -or
                 $global:Ff7ecAccountLauncherOverrideCalls -ne 0) {
                 throw "Standalone startup did not isolate server configuration and overrides."
+            }
+            if ($global:Ff7ecAccountLauncherCheckCommand -notmatch "Ff7ec__Standalone__MasterDataBackupDirectory") {
+                throw "Standalone startup did not explicitly configure its masterdata backup."
             }
         }
     }

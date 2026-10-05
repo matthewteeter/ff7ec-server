@@ -147,6 +147,24 @@ installed, already-downloaded game:
   -AccountJsonPath "D:\PrivateFF7EC\account-export.json" -LaunchGame
 ```
 
+To use updated masterdata downloaded by the Steam client instead of the installed
+starter catalogs, copy the client's content directory to a private backup and run:
+
+```powershell
+.\launcher\Start-Ff7ecOffline.ps1 -Standalone `
+  -AccountJsonPath "D:\PrivateFF7EC\account-export.json" `
+  -MasterDataBackupDirectory "D:\PrivateFF7EC\SteamContentBackup" -LaunchGame
+```
+
+The backup root must contain `MasterData\master_catalog.json`, its named `.bin`
+tables, and `LocalizeText\<language>\text_catalog.json` with its named `.json`
+parts. These are normal game content files, not captured requests or responses.
+The server serves their original encrypted bytes at the catalog's hashed URLs,
+checks every referenced part's size and ciphertext hash, and validates the export's
+master references. The backup is read-only; `GameSave`, account data, and
+`MessagePack` directories are never loaded. Missing, corrupt, or incompatible
+backup content fails explicitly without falling back to starter data.
+
 Steam libraries are discovered automatically. Pass `-GameDirectory` or set
 `FF7EC_GAME_DIRECTORY` to choose an installation explicitly. Steam's own client
 and login/offline-mode requirements still apply; the server does not replace
@@ -204,6 +222,7 @@ The launcher stores settings under
 `<preservationRoot>\single-player\gaps`, separate from replay-mode overlays.
 For direct startup, set `Ff7ec:Standalone:Enabled=true`,
 `Ff7ec:Standalone:GameDirectory`, and `Ff7ec:AccountExport:JsonPath`.
+Set `Ff7ec:Standalone:MasterDataBackupDirectory` to use a Steam content backup.
 Standalone appends `standalone` to the configured `Ff7ec:DataDirectory`;
 existing files in the parent directory are never loaded. Malformed saved state
 fails startup, and unreadable saved setting payloads fail the title request

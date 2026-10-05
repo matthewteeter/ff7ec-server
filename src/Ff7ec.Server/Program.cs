@@ -60,7 +60,9 @@ if (standalone)
     string webviewHost = hostNames.Single(host => host.StartsWith("webview-", StringComparison.Ordinal));
     builder.Services.AddSingleton(sp => new LocalGameContentStore(
         sp.GetRequiredService<ILogger<LocalGameContentStore>>(), gameDirectory, masterHost, assetManifestHost, assetDataHost,
-        sp.GetRequiredService<AccountExportStore>().RequiredMasterIds));
+        sp.GetRequiredService<AccountExportStore>().RequiredMasterIds,
+        standaloneConfig["MasterDataBackupDirectory"] is string backupDirectory && !string.IsNullOrWhiteSpace(backupDirectory)
+            ? Path.GetFullPath(backupDirectory, builder.Environment.ContentRootPath) : null));
     builder.Services.AddSingleton<StandaloneResponseHeaders>();
     builder.Services.AddSingleton(sp => new StandaloneApi(sp.GetRequiredService<AccountExportStore>(),
         sp.GetRequiredService<LocalGameContentStore>(), accountExportConfig["ApiHost"] ?? hostNames[0], webviewHost));

@@ -29,7 +29,8 @@ public sealed class LocalGameContentStore
     public LocalGameContentStore(
         ILogger<LocalGameContentStore> logger, string gameDirectory,
         string masterHost, string manifestHost, string assetHost,
-        IReadOnlyDictionary<string, IReadOnlySet<long>>? requiredMasterIds = null)
+        IReadOnlyDictionary<string, IReadOnlySet<long>>? requiredMasterIds = null,
+        string? masterDataBackupDirectory = null)
     {
         _masterHost = masterHost;
         _manifestHost = manifestHost;
@@ -76,19 +77,31 @@ public sealed class LocalGameContentStore
         if (!assetBuckets.Any(Directory.Exists))
             throw new DirectoryNotFoundException("Standalone mode requires the installed Octo asset cache.");
 
-        using var index = JsonDocument.Parse(File.ReadAllBytes(Path.Combine(_masterRoot, "index.json")));
-        string indexedCatalog = index.RootElement.GetProperty("master_data_catalog").GetString()
-            ?? throw new InvalidDataException("The masterdata index has no master catalog.");
-        MasterCatalogPath = SelectMasterCatalog(logger, indexedCatalog, requiredMasterIds);
-        LoadCatalog(MasterCatalogPath, "tables");
-        foreach (var entry in index.RootElement.EnumerateObject()
-                     .Where(entry => entry.Name.StartsWith("language_catalog_", StringComparison.Ordinal)))
+        if (string.IsNullOrWhiteSpace(masterDataBackupDirectory))
         {
-            string path = entry.Value.GetString() ?? throw new InvalidDataException("A language catalog path is null.");
-            string language = entry.Name["language_catalog_".Length..];
-            if (!_languageCatalogs.TryAdd(language, path))
-                throw new InvalidDataException($"Duplicate language catalog: {language}.");
-            LoadCatalog(path, "files");
+            using var index = JsonDocument.Parse(File.ReadAllBytes(Path.Combine(_masterRoot, "index.json")));
+            string indexedCatalog = index.RootElement.GetProperty("master_data_catalog").GetString()
+                ?? throw new InvalidDataException("The masterdata index has no master catalog.");
+            MasterCatalogPath = SelectMasterCatalog(logger, indexedCatalog, requiredMasterIds);
+            LoadCatalog(MasterCatalogPath, "tables");
+            foreach (var entry in index.RootElement.EnumerateObject()
+                         .Where(entry => entry.Name.StartsWith("language_catalog_", StringComparison.Ordinal)))
+            {
+                string path = entry.Value.GetString() ?? throw new InvalidDataException("A language catalog path is null.");
+                string language = entry.Name["language_catalog_".Length..];
+                if (!_languageCatalogs.TryAdd(language, path))
+                    throw new InvalidDataException($"Duplicate language catalog: {language}.");
+                LoadCatalog(path, "files");
+            }
+        }
+        else
+        {
+            MasterCatalogPath = LoadBackup(Path.GetFullPath(masterDataBackupDirectory));
+            if (!IsCompatibleMasterCatalog(logger, MasterCatalogPath, requiredMasterIds,
+                    (path, size) => _masterFiles.TryGetValue(path, out var file) && file.Size == size ? file
+                        : throw new InvalidDataException($"Backed-up masterdata is missing a catalog part: {path}.")))
+                throw new InvalidDataException("The masterdata backup does not contain the exported character, weapon, and special-skill IDs.");
+            logger.LogInformation("LOCAL CONTENT uses read-only masterdata backup {Directory}.", masterDataBackupDirectory);
         }
         if (!_languageCatalogs.ContainsKey("en"))
             throw new InvalidDataException("Standalone mode requires the English masterdata catalog.");
@@ -198,44 +211,124 @@ public sealed class LocalGameContentStore
         return compatible[0];
 
         bool IsCompatible(string path)
+            => IsCompatibleMasterCatalog(logger, path, requiredIds, CreateMasterFile);
+    }
+
+    private bool IsCompatibleMasterCatalog(
+        ILogger logger, string path, IReadOnlyDictionary<string, IReadOnlySet<long>>? requiredIds,
+        Func<string, long?, ContentFile> resolveFile)
+    {
+        if (requiredIds is null || requiredIds.Count == 0) return true;
+        ContentFile catalogFile = _masterFiles.TryGetValue(path, out var registered)
+            ? registered : resolveFile(path, null);
+        using var catalog = JsonDocument.Parse(MasterDataCrypto.Decrypt(ReadVerified(catalogFile)));
+        var tables = catalog.RootElement.GetProperty("tables").EnumerateArray()
+            .Where(entry => entry.TryGetProperty("table", out _))
+            .ToDictionary(entry => entry.GetProperty("table").GetString()
+                ?? throw new InvalidDataException("An installed masterdata table has no name."), StringComparer.Ordinal);
+        foreach (var (table, ids) in requiredIds)
         {
-            using var catalog = JsonDocument.Parse(MasterDataCrypto.Decrypt(ReadVerified(CreateMasterFile(path, null))));
-            var tables = catalog.RootElement.GetProperty("tables").EnumerateArray()
-                .Where(entry => entry.TryGetProperty("table", out _))
-                .ToDictionary(entry => entry.GetProperty("table").GetString()
-                    ?? throw new InvalidDataException("An installed masterdata table has no name."), StringComparer.Ordinal);
-            foreach (var (table, ids) in requiredIds)
+            if (!tables.TryGetValue(table, out var entry))
             {
-                if (!tables.TryGetValue(table, out var entry))
-                {
-                    logger.LogInformation("Master catalog {Catalog} has no required table {Table}.", path, table);
-                    return false;
-                }
-                string partPath = entry.GetProperty("path").GetString()
-                    ?? throw new InvalidDataException($"An installed masterdata table has no path: {table}.");
-                var available = MasterTableIds.Read(ReadVerified(CreateMasterFile(partPath, entry.GetProperty("size").GetInt64())));
-                long[] missing = ids.Where(id => !available.Contains(id)).Order().ToArray();
-                if (missing.Length > 0)
-                {
-                    logger.LogInformation("Master catalog {Catalog} lacks {Count} exported IDs in {Table}: {Ids}.",
-                        path, missing.Length, table, string.Join(", ", missing.Take(8)));
-                    return false;
-                }
+                logger.LogInformation("Master catalog {Catalog} has no required table {Table}.", path, table);
+                return false;
             }
-            return true;
+            string partPath = entry.GetProperty("path").GetString()
+                ?? throw new InvalidDataException($"An installed masterdata table has no path: {table}.");
+            var available = MasterTableIds.Read(ReadVerified(resolveFile(partPath, entry.GetProperty("size").GetInt64())));
+            long[] missing = ids.Where(id => !available.Contains(id)).Order().ToArray();
+            if (missing.Length > 0)
+            {
+                logger.LogInformation("Master catalog {Catalog} lacks {Count} exported IDs in {Table}: {Ids}.",
+                    path, missing.Length, table, string.Join(", ", missing.Take(8)));
+                return false;
+            }
         }
+        return true;
+    }
+
+    private string LoadBackup(string root)
+    {
+        string masterDirectory = Path.Combine(root, "MasterData");
+        string masterCatalog = RegisterCatalog(Path.Combine(masterDirectory, "master_catalog.json"), "/catalogs/");
+        using (var json = JsonDocument.Parse(MasterDataCrypto.Decrypt(ReadVerified(_masterFiles[masterCatalog]))))
+        {
+            foreach (var entry in json.RootElement.GetProperty("tables").EnumerateArray())
+            {
+                string table = entry.GetProperty("table").GetString()
+                    ?? throw new InvalidDataException("A backed-up master table has no name.");
+                string name = TableCacheName(table) + ".bin";
+                RegisterPart(entry, Path.Combine(masterDirectory, name));
+            }
+        }
+        foreach (string directory in Directory.EnumerateDirectories(Path.Combine(root, "LocalizeText")))
+        {
+            string language = Path.GetFileName(directory).ToLowerInvariant();
+            if (language.Length != 2 || !language.All(char.IsAsciiLetter))
+                throw new InvalidDataException($"Unsafe backed-up localization language: {language}.");
+            string catalog = RegisterCatalog(Path.Combine(directory, "text_catalog.json"), $"/language_catalogs/{language}/");
+            if (!_languageCatalogs.TryAdd(language, catalog))
+                throw new InvalidDataException($"Duplicate backed-up localization language: {language}.");
+            using var json = JsonDocument.Parse(MasterDataCrypto.Decrypt(ReadVerified(_masterFiles[catalog])));
+            foreach (var entry in json.RootElement.GetProperty("files").EnumerateArray())
+            {
+                string name = entry.GetProperty("name").GetString()
+                    ?? throw new InvalidDataException("A backed-up localization file has no name.");
+                if (name.Length == 0 || !name.All(character => char.IsAsciiLetterOrDigit(character) || character is '_' or '-'))
+                    throw new InvalidDataException($"Unsafe backed-up localization file name: {name}.");
+                if (entry.TryGetProperty("is_table", out var isTable) && isTable.GetBoolean())
+                    name = TableCacheName(name);
+                RegisterPart(entry, Path.Combine(directory, name + ".json"));
+            }
+        }
+        return masterCatalog;
+
+        string RegisterCatalog(string filePath, string prefix)
+        {
+            string path = prefix + Sha256Name(File.ReadAllBytes(filePath)) + ".json";
+            RegisterFile(path, CreateContentFile(filePath, path, null));
+            return path;
+        }
+
+        void RegisterPart(JsonElement entry, string filePath)
+        {
+            string path = entry.GetProperty("path").GetString()
+                ?? throw new InvalidDataException("A backed-up catalog part has no path.");
+            ContentFile file = CreateContentFile(filePath, path, entry.GetProperty("size").GetInt64());
+            ReadVerified(file);
+            RegisterFile(path, file);
+        }
+    }
+
+    private static string TableCacheName(string table)
+    {
+        if (!table.StartsWith("m_", StringComparison.Ordinal) ||
+            table[2..].Split('_').Any(word => word.Length == 0 || !word.All(char.IsAsciiLetterOrDigit)))
+            throw new InvalidDataException($"Unsafe backed-up master table name: {table}.");
+        return string.Concat(table[2..].Split('_').Select(word => char.ToUpperInvariant(word[0]) + word[1..]));
     }
 
     private ContentFile AddMasterFile(string path, long? size)
     {
         var file = CreateMasterFile(path, size);
-        if (_masterFiles.TryGetValue(path, out var existing) && existing != file)
-            throw new InvalidDataException($"Conflicting installed masterdata records: {path}.");
-        _masterFiles[path] = file;
+        RegisterFile(path, file);
         return file;
     }
 
+    private void RegisterFile(string path, ContentFile file)
+    {
+        if (_masterFiles.TryGetValue(path, out var existing) && existing != file)
+            throw new InvalidDataException($"Conflicting installed masterdata records: {path}.");
+        _masterFiles[path] = file;
+    }
+
     private ContentFile CreateMasterFile(string path, long? size)
+    {
+        if (string.IsNullOrEmpty(path)) throw new InvalidDataException("An installed masterdata path is empty.");
+        return CreateContentFile(Path.Combine(_masterRoot, path[1..].Replace('/', Path.DirectorySeparatorChar)), path, size);
+    }
+
+    private static ContentFile CreateContentFile(string filePath, string path, long? size)
     {
         if (size is <= 0) throw new InvalidDataException($"Masterdata file size must be positive: {path}.");
         if (string.IsNullOrEmpty(path) || !path.StartsWith('/') || path.Contains('\\') || path.Contains('%') ||
@@ -248,7 +341,7 @@ public sealed class LocalGameContentStore
         string hash = Path.GetFileNameWithoutExtension(path);
         if (hash.Length != 52 || hash.Any(character => character is not (>= 'A' and <= 'Z' or >= '2' and <= '7')))
             throw new InvalidDataException($"Masterdata path is not SHA-256-addressed: {path}.");
-        return new ContentFile(Path.Combine(_masterRoot, path[1..].Replace('/', Path.DirectorySeparatorChar)), hash, size);
+        return new ContentFile(filePath, hash, size);
     }
 
     private static byte[] ReadVerified(ContentFile file)

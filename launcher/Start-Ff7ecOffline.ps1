@@ -24,6 +24,9 @@
 
 .PARAMETER GameDirectory
     FF7EC installation for standalone mode. Otherwise discover it in Steam libraries.
+
+.PARAMETER MasterDataBackupDirectory
+    Read-only Steam content backup containing MasterData and LocalizeText directories.
 #>
 param(
     [switch]$LaunchGame,
@@ -32,7 +35,8 @@ param(
     [string]$ProtocolAssemblyPath,
     [string]$ProtocolSchemaPath,
     [switch]$Standalone,
-    [string]$GameDirectory
+    [string]$GameDirectory,
+    [string]$MasterDataBackupDirectory
 )
 
 $ErrorActionPreference = "Stop"
@@ -47,6 +51,16 @@ if ($Standalone -and [string]::IsNullOrWhiteSpace($AccountJsonPath)) {
 }
 if (-not $Standalone -and -not [string]::IsNullOrWhiteSpace($GameDirectory)) {
     throw "-GameDirectory requires -Standalone."
+}
+if (-not $Standalone -and -not [string]::IsNullOrWhiteSpace($MasterDataBackupDirectory)) {
+    throw "-MasterDataBackupDirectory requires -Standalone."
+}
+if (-not [string]::IsNullOrWhiteSpace($MasterDataBackupDirectory)) {
+    $MasterDataBackupDirectory = (Resolve-Path -LiteralPath $MasterDataBackupDirectory).ProviderPath
+    if (-not (Test-Path -LiteralPath (Join-Path $MasterDataBackupDirectory "MasterData\master_catalog.json") -PathType Leaf) -or
+        -not (Test-Path -LiteralPath (Join-Path $MasterDataBackupDirectory "LocalizeText") -PathType Container)) {
+        throw "-MasterDataBackupDirectory must contain MasterData\master_catalog.json and LocalizeText."
+    }
 }
 if ([string]::IsNullOrWhiteSpace($AccountJsonPath) -and
     (-not [string]::IsNullOrWhiteSpace($ProtocolAssemblyPath) -or -not [string]::IsNullOrWhiteSpace($ProtocolSchemaPath))) {
@@ -108,6 +122,7 @@ $serverCommand = "Set-Location -LiteralPath '$($serverProject.Replace("'", "''")
 if ($Standalone) {
     $serverCommand = "`$env:Ff7ec__Standalone__Enabled = 'true'; " +
         "`$env:Ff7ec__Standalone__GameDirectory = '$($GameDirectory.Replace("'", "''"))'; " +
+        "`$env:Ff7ec__Standalone__MasterDataBackupDirectory = '$($MasterDataBackupDirectory.Replace("'", "''"))'; " +
         "`$env:Ff7ec__DataDirectory = '$($standaloneStateRoot.Replace("'", "''"))'; " +
         "`$env:Ff7ec__GapsDirectory = '$((Join-Path $standaloneStateRoot 'gaps').Replace("'", "''"))'; " + $serverCommand
 } else {
