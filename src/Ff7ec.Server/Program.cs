@@ -1,5 +1,6 @@
 using System.Security.Cryptography.X509Certificates;
 using System.Security.Cryptography;
+using System.Net;
 using Microsoft.AspNetCore.Http.Extensions;
 using Ff7ec.Server;
 
@@ -11,6 +12,9 @@ string capturesDir = Path.GetFullPath(config["CapturesDirectory"] ?? throw new I
 string certDir = Path.GetFullPath(config["CertDirectory"] ?? throw new InvalidOperationException("Ff7ec:CertDirectory not configured"), builder.Environment.ContentRootPath);
 string gapsDir = Path.GetFullPath(config["GapsDirectory"] ?? throw new InvalidOperationException("Ff7ec:GapsDirectory not configured"), builder.Environment.ContentRootPath);
 string dataDir = Path.GetFullPath(config["DataDirectory"] ?? throw new InvalidOperationException("Ff7ec:DataDirectory not configured"), builder.Environment.ContentRootPath);
+var standaloneConfig = config.GetSection("Standalone");
+bool standalone = standaloneConfig.GetValue("Enabled", false);
+if (standalone) dataDir = Path.Combine(dataDir, "standalone");
 var assetOverrideConfig = config.GetSection("AssetOverride");
 string assetOverrideStateDirectory = Path.GetFullPath(
     assetOverrideConfig["StateDirectory"] ?? Path.Combine(dataDir, "asset-overrides"), builder.Environment.ContentRootPath);
@@ -25,6 +29,8 @@ string[] hostNames = config.GetSection("Hostnames").Get<string[]>()
 var accountExportConfig = config.GetSection("AccountExport");
 string? accountJsonPath = accountExportConfig["JsonPath"];
 string? protocolAssemblyPath = accountExportConfig["ProtocolAssemblyPath"];
+if (standalone && string.IsNullOrWhiteSpace(accountJsonPath))
+    throw new InvalidOperationException("Standalone mode requires AccountExport:JsonPath.");
 if (string.IsNullOrWhiteSpace(accountJsonPath) && !string.IsNullOrWhiteSpace(protocolAssemblyPath))
     throw new InvalidOperationException("AccountExport:ProtocolAssemblyPath requires JsonPath.");
 if (!string.IsNullOrWhiteSpace(accountJsonPath))
@@ -43,6 +49,22 @@ if (!string.IsNullOrWhiteSpace(accountJsonPath))
         accountExportConfig["ApiHost"] ?? hostNames[0],
         accountExportConfig.GetValue<long?>("FrozenServerTime")));
 }
+if (standalone)
+{
+    string gameDirectory = standaloneConfig["GameDirectory"]
+        ?? throw new InvalidOperationException("Standalone:GameDirectory is required.");
+    if (string.IsNullOrWhiteSpace(gameDirectory))
+        throw new InvalidOperationException("Standalone:GameDirectory is required.");
+    gameDirectory = Path.GetFullPath(gameDirectory, builder.Environment.ContentRootPath);
+    string masterHost = hostNames.Single(host => host.StartsWith("client-masterdata-", StringComparison.Ordinal));
+    string webviewHost = hostNames.Single(host => host.StartsWith("webview-", StringComparison.Ordinal));
+    builder.Services.AddSingleton(sp => new LocalGameContentStore(
+        sp.GetRequiredService<ILogger<LocalGameContentStore>>(), gameDirectory, masterHost, assetManifestHost, assetDataHost,
+        sp.GetRequiredService<AccountExportStore>().RequiredMasterIds));
+    builder.Services.AddSingleton<StandaloneResponseHeaders>();
+    builder.Services.AddSingleton(sp => new StandaloneApi(sp.GetRequiredService<AccountExportStore>(),
+        sp.GetRequiredService<LocalGameContentStore>(), accountExportConfig["ApiHost"] ?? hostNames[0], webviewHost));
+}
 
 var (leafCert, rootCaCert) = CertManager.EnsureCertificates(certDir, hostNames);
 Console.WriteLine($"[FF7EC] Using leaf cert '{leafCert.Subject}' (thumbprint {leafCert.Thumbprint})");
@@ -50,19 +72,21 @@ Console.WriteLine($"[FF7EC] Root CA thumbprint {rootCaCert.Thumbprint} - install
 
 builder.WebHost.ConfigureKestrel(options =>
 {
-    options.ListenAnyIP(listenPort, listenOptions =>
+    void ConfigureHttps(Microsoft.AspNetCore.Server.Kestrel.Core.ListenOptions listenOptions)
     {
         listenOptions.UseHttps(httpsOptions =>
         {
             httpsOptions.ServerCertificateSelector = (_, _) => leafCert;
         });
-    });
+    }
+    if (standalone) options.Listen(IPAddress.Loopback, listenPort, ConfigureHttps);
+    else options.ListenAnyIP(listenPort, ConfigureHttps);
 });
 
-builder.Services.AddSingleton(sp => new ReplayStore(sp.GetRequiredService<ILogger<ReplayStore>>(), capturesDir));
+builder.Services.AddSingleton(sp => new ReplayStore(sp.GetRequiredService<ILogger<ReplayStore>>(), capturesDir, !standalone));
 builder.Services.AddSingleton(sp => new GapLogger(sp.GetRequiredService<ILogger<GapLogger>>(), gapsDir));
-builder.Services.AddSingleton(sp => new PartySettingsStore(sp.GetRequiredService<ILogger<PartySettingsStore>>(), dataDir));
-builder.Services.AddSingleton(sp => new StoryStateStore(sp.GetRequiredService<ILogger<StoryStateStore>>(), dataDir));
+builder.Services.AddSingleton(sp => new PartySettingsStore(sp.GetRequiredService<ILogger<PartySettingsStore>>(), dataDir, standalone));
+builder.Services.AddSingleton(sp => new StoryStateStore(sp.GetRequiredService<ILogger<StoryStateStore>>(), dataDir, standalone));
 builder.Services.AddSingleton(sp => new LocalAssetOverrideStore(
     sp.GetRequiredService<ILogger<LocalAssetOverrideStore>>(),
     assetOverrideStateDirectory,
@@ -73,7 +97,7 @@ builder.Services.AddSingleton(sp => new LocalAssetOverrideStore(
 builder.Services.AddSingleton(sp => new PartyStateMerger(
     sp.GetRequiredService<PartySettingsStore>(),
     sp.GetRequiredService<StoryStateStore>(),
-    sp.GetRequiredService<ILogger<PartyStateMerger>>()));
+    sp.GetRequiredService<ILogger<PartyStateMerger>>(), standalone));
 
 var app = builder.Build();
 
@@ -85,6 +109,10 @@ var storyStateStore = app.Services.GetRequiredService<StoryStateStore>();
 var assetOverrideStore = app.Services.GetRequiredService<LocalAssetOverrideStore>();
 var partyStateMerger = app.Services.GetRequiredService<PartyStateMerger>();
 var accountExportStore = app.Services.GetService<AccountExportStore>();
+var localContent = app.Services.GetService<LocalGameContentStore>();
+var standaloneHeaders = app.Services.GetService<StandaloneResponseHeaders>();
+var standaloneApi = app.Services.GetService<StandaloneApi>();
+if (standalone) app.Logger.LogInformation("STANDALONE single-player mode: loopback only, no replay or asset overrides; settings use {Directory}", dataDir);
 app.Logger.LogInformation("FF7EC offline server ready - {Count} captured responses loaded, listening on :{Port} for {Hosts}",
     store.Count, listenPort, string.Join(", ", hostNames));
 
@@ -122,6 +150,16 @@ var storyStateEndpoints = new HashSet<string>(StringComparer.Ordinal)
     "/api/pvt/story/select/drama",
     "/api/pvt/story/result",
 };
+var standaloneWriteEndpoints = new HashSet<string>(StringComparer.Ordinal)
+{
+    "/api/pvt/party/solo/set/upsert",
+    "/api/pvt/user/home/background/setting",
+    "/api/pvt/story/select/drama",
+    "/api/pvt/story/result",
+    "/api/pvt/character/story/result",
+    "/api/pvt/dungeon/story/start",
+    "/api/pvt/dungeon/story/end",
+};
 
 app.Run(async context =>
 {
@@ -133,7 +171,7 @@ app.Run(async context =>
     await request.Body.CopyToAsync(bodyStream);
     var bodyBytes = bodyStream.ToArray();
 
-    if (HttpMethods.IsGet(request.Method) && assetOverrideStore.TryGetAsset(host, pathAndQuery, out var overrideAsset))
+    if (!standalone && HttpMethods.IsGet(request.Method) && assetOverrideStore.TryGetAsset(host, pathAndQuery, out var overrideAsset))
     {
         context.Response.StatusCode = StatusCodes.Status200OK;
         context.Response.ContentType = "application/octet-stream";
@@ -152,6 +190,58 @@ app.Run(async context =>
         await context.Response.WriteAsync("This server is configured for a different exported account.\n");
         return;
     }
+    if (standalone && !isExportAccountRequest)
+    {
+        if (HttpMethods.IsGet(request.Method))
+        {
+            try
+            {
+                if (localContent!.TryGet(request.Host.Host, requestPath, out var contentBody, out var contentType))
+                {
+                    context.Response.ContentType = contentType;
+                    context.Response.ContentLength = contentBody.Length;
+                    app.Logger.LogInformation("LOCAL CONTENT {Host}{Path} -> 200 ({Bytes} bytes)", host, requestPath, contentBody.Length);
+                    await context.Response.Body.WriteAsync(contentBody);
+                    return;
+                }
+            }
+            catch (Exception ex) when (ex is IOException or CryptographicException or InvalidDataException)
+            {
+                app.Logger.LogError(ex, "LOCAL CONTENT unavailable at {Host}{Path}", host, requestPath);
+                context.Response.StatusCode = StatusCodes.Status503ServiceUnavailable;
+                await context.Response.WriteAsync("Required installed game content is missing or invalid.\n");
+                return;
+            }
+        }
+    }
+    if (standaloneApi?.Handles(request) == true)
+    {
+        if (!standaloneApi.HasCorrectMethod(request))
+        {
+            app.Logger.LogWarning("STANDALONE rejected method {Method} at {Path}", request.Method, requestPath);
+            context.Response.StatusCode = StatusCodes.Status405MethodNotAllowed;
+            context.Response.Headers.Allow = requestPath == "/api/check" ? HttpMethods.Get : HttpMethods.Post;
+            return;
+        }
+        byte[] generated;
+        try
+        {
+            standaloneHeaders!.Apply(request, context.Response.Headers);
+            generated = standaloneApi.CreateResponse(request, bodyBytes, context.Response.Headers);
+        }
+        catch (Exception ex) when (ex is InvalidDataException or CryptographicException or InvalidOperationException or NotSupportedException)
+        {
+            app.Logger.LogWarning(ex, "STANDALONE rejected malformed request at {Path}", requestPath);
+            context.Response.Headers.Clear();
+            context.Response.StatusCode = StatusCodes.Status400BadRequest;
+            await context.Response.WriteAsync("Invalid standalone API request.\n");
+            return;
+        }
+        context.Response.ContentLength = generated.Length;
+        app.Logger.LogInformation("STANDALONE {Path} -> 200 ({Bytes} generated bytes)", requestPath, generated.Length);
+        await context.Response.Body.WriteAsync(generated);
+        return;
+    }
 
     if (isExportAccountRequest && accountExportStore!.Handles(requestPath) && !HttpMethods.IsPost(request.Method))
     {
@@ -163,7 +253,8 @@ app.Run(async context =>
 
     if (isExportAccountRequest && accountExportStore!.Handles(requestPath))
     {
-        if (!accountExportStore.TryGetHeaderTemplate(request, store, out var template))
+        CapturedResponse? template = null;
+        if (!standalone && !accountExportStore.TryGetHeaderTemplate(request, store, out template))
         {
             app.Logger.LogError("ACCOUNT EXPORT has no secure header template for {Host}{Path}", host, requestPath);
             context.Response.StatusCode = StatusCodes.Status503ServiceUnavailable;
@@ -173,9 +264,11 @@ app.Run(async context =>
         byte[] generated;
         try
         {
-            foreach (var header in template.ResponseHeaders)
-                if (!suppressedHeaders.Contains(header.Name))
-                    context.Response.Headers[header.Name] = header.Value;
+            if (standalone) standaloneHeaders!.Apply(request, context.Response.Headers);
+            else
+                foreach (var header in template!.ResponseHeaders)
+                    if (!suppressedHeaders.Contains(header.Name))
+                        context.Response.Headers[header.Name] = header.Value;
             generated = accountExportStore.CreateResponse(request, bodyBytes, context.Response.Headers);
         }
         catch (Exception ex) when (ex is InvalidDataException or CryptographicException or InvalidOperationException or NotSupportedException)
@@ -186,7 +279,18 @@ app.Run(async context =>
             await context.Response.WriteAsync("Invalid exported-account API request.\n");
             return;
         }
-        generated = partyStateMerger.MergeReplayResponse(request, generated, context.Response.Headers) ?? generated;
+        try
+        {
+            generated = partyStateMerger.MergeReplayResponse(request, generated, context.Response.Headers) ?? generated;
+        }
+        catch (InvalidDataException ex)
+        {
+            app.Logger.LogError(ex, "STANDALONE could not apply saved settings at {Path}", requestPath);
+            context.Response.Headers.Clear();
+            context.Response.StatusCode = StatusCodes.Status500InternalServerError;
+            await context.Response.WriteAsync("Could not apply saved standalone settings; existing data was not discarded.\n");
+            return;
+        }
         context.Response.StatusCode = StatusCodes.Status200OK;
         context.Response.ContentLength = generated.Length;
         app.Logger.LogInformation("ACCOUNT EXPORT {Path} -> 200 ({Bytes} generated bytes)", requestPath, generated.Length);
@@ -196,6 +300,22 @@ app.Run(async context =>
 
     var isSettingsWrite = writableSettingsEndpoints.Contains(requestPath);
     var isEmptyWrite = emptyWriteEndpoints.Contains(requestPath);
+    if (standalone && (isSettingsWrite || isEmptyWrite) &&
+        (!isExportAccountRequest || !standaloneWriteEndpoints.Contains(requestPath)))
+    {
+        await app.Services.GetRequiredService<GapLogger>().LogAsync(request, bodyBytes);
+        app.Logger.LogWarning("STANDALONE does not support this progression or multiplayer write: {Path}", requestPath);
+        context.Response.StatusCode = StatusCodes.Status501NotImplemented;
+        await context.Response.WriteAsync("This operation is not supported by standalone single-player mode.\n");
+        return;
+    }
+    if (standalone && (isSettingsWrite || isEmptyWrite) && !HttpMethods.IsPost(request.Method))
+    {
+        app.Logger.LogWarning("STANDALONE rejected write method {Method} at {Path}", request.Method, requestPath);
+        context.Response.StatusCode = StatusCodes.Status405MethodNotAllowed;
+        context.Response.Headers.Allow = HttpMethods.Post;
+        return;
+    }
     if (HttpMethods.IsPost(request.Method) && (isSettingsWrite || isEmptyWrite))
     {
         var userId = request.Query["user_id"].ToString();
@@ -210,7 +330,7 @@ app.Run(async context =>
             return;
         }
 
-        if (isSettingsWrite)
+        if (isSettingsWrite && !standalone)
         {
             await partySettingsStore.AppendAsync(
                 host,
@@ -223,7 +343,7 @@ app.Run(async context =>
                 context.RequestAborted);
         }
 
-        if (storyStateEndpoints.Contains(requestPath))
+        if (storyStateEndpoints.Contains(requestPath) && !standalone)
         {
             await storyStateStore.AppendAsync(
                 host,
@@ -239,10 +359,10 @@ app.Run(async context =>
         // envelope, replacing its endpoint-specific response and optional user update.
         var responseTemplatePath =
             $"/api/pvt/store/purchase/restart/steam?user_id={Uri.EscapeDataString(userId)}";
-        CapturedResponse responseTemplate;
-        bool hasTemplate = isExportAccountRequest
+        CapturedResponse? responseTemplate = null;
+        bool hasTemplate = standalone || (isExportAccountRequest
             ? accountExportStore!.TryGetHeaderTemplate(request, store, out responseTemplate)
-            : store.TryGet(host, HttpMethods.Post, responseTemplatePath, out responseTemplate);
+            : store.TryGet(host, HttpMethods.Post, responseTemplatePath, out responseTemplate));
         if (!hasTemplate)
         {
             app.Logger.LogError(
@@ -254,16 +374,29 @@ app.Run(async context =>
             return;
         }
 
-        context.Response.StatusCode = responseTemplate.StatusCode;
-        foreach (var header in responseTemplate.ResponseHeaders)
+        context.Response.StatusCode = standalone ? StatusCodes.Status200OK : responseTemplate!.StatusCode;
+        if (standalone)
         {
-            if (suppressedHeaders.Contains(header.Name)) continue;
-            context.Response.Headers[header.Name] = header.Value;
+            try { standaloneHeaders!.Apply(request, context.Response.Headers); }
+            catch (InvalidDataException ex)
+            {
+                app.Logger.LogWarning(ex, "STANDALONE rejected write language at {Path}", requestPath);
+                context.Response.Headers.Clear();
+                context.Response.StatusCode = StatusCodes.Status400BadRequest;
+                await context.Response.WriteAsync("Unsupported standalone language.\n");
+                return;
+            }
         }
+        else
+            foreach (var header in responseTemplate!.ResponseHeaders)
+            {
+                if (suppressedHeaders.Contains(header.Name)) continue;
+                context.Response.Headers[header.Name] = header.Value;
+            }
 
         var templateBody = isExportAccountRequest
             ? accountExportStore!.CreateWriteTemplate(context.Response.Headers)
-            : responseTemplate.Body;
+            : responseTemplate!.Body;
         var responseBody = isSettingsWrite
             ? partyStateMerger.CreateWriteResponse(
                 requestPath, userId, bodyBytes, templateBody, context.Response.Headers)
@@ -271,16 +404,26 @@ app.Run(async context =>
                 requestPath, userId, bodyBytes, templateBody, context.Response.Headers);
         if (responseBody is null && isSettingsWrite && !isExportAccountRequest)
         {
-            responseBody = responseTemplate.Body;
+            responseBody = responseTemplate!.Body;
             app.Logger.LogWarning(
                 "SETTINGS WRITE ACK could not include a client cache update; using {Template}",
                 Path.GetFileName(responseTemplate.SourceFile));
         }
         else if (responseBody is null)
         {
-            context.Response.StatusCode = StatusCodes.Status500InternalServerError;
+            context.Response.Headers.Clear();
+            context.Response.StatusCode = standalone ? StatusCodes.Status400BadRequest : StatusCodes.Status500InternalServerError;
             await context.Response.WriteAsync("Could not generate a secure write response.\n");
             return;
+        }
+        if (standalone)
+        {
+            if (isSettingsWrite)
+                await partySettingsStore.AppendAsync(host, requestPath, pathAndQuery, userId, contentHash,
+                    request.ContentType, bodyBytes, context.RequestAborted);
+            if (storyStateEndpoints.Contains(requestPath))
+                await storyStateStore.AppendAsync(host, requestPath, pathAndQuery, userId, contentHash,
+                    bodyBytes, context.RequestAborted);
         }
 
         context.Response.ContentLength = responseBody.Length;
@@ -288,10 +431,19 @@ app.Run(async context =>
             "WRITE ACK {Host}{Path} -> {Status} ({Bytes} bytes){Update}",
             host,
             request.Path,
-            responseTemplate.StatusCode,
+            context.Response.StatusCode,
             responseBody.Length,
             isSettingsWrite ? " with client cache update" : string.Empty);
         await context.Response.Body.WriteAsync(responseBody);
+        return;
+    }
+    if (standalone)
+    {
+        await app.Services.GetRequiredService<GapLogger>().LogAsync(request, bodyBytes);
+        app.Logger.LogWarning("STANDALONE unsupported endpoint {Method} {Host}{Path}; replay is disabled",
+            request.Method, host, requestPath);
+        context.Response.StatusCode = StatusCodes.Status501NotImplemented;
+        await context.Response.WriteAsync("Standalone mode has no local handler for this request; replay is disabled.\n");
         return;
     }
 

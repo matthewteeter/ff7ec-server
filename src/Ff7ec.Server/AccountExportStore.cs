@@ -1,3 +1,4 @@
+using System.Collections.Frozen;
 using System.Globalization;
 using System.Text.Json;
 
@@ -27,6 +28,7 @@ public sealed class AccountExportStore
 
     public string UserId { get; }
     public long FrozenServerTime { get; }
+    public IReadOnlyDictionary<string, IReadOnlySet<long>> RequiredMasterIds { get; }
 
     public AccountExportStore(
         ILogger<AccountExportStore> logger,
@@ -58,6 +60,24 @@ public sealed class AccountExportStore
 
         var account = snapshot.GetProperty("AccountInfo");
         _accountTables = _schema.Encode("Tables", account);
+        var masterIds = new Dictionary<string, IReadOnlySet<long>>(StringComparer.Ordinal);
+        foreach (var (table, section, field) in new[]
+        {
+            ("m_skill_special", "UserSkillSpecialList", "SpecialSkillId"),
+            ("m_character", "UserCharacterList", "CharacterId"),
+            ("m_weapon", "UserWeaponList", "WeaponId"),
+        })
+        {
+            if (!account.TryGetProperty(section, out var list)) continue;
+            var ids = list.ValueKind == JsonValueKind.Null ? [] :
+                list.EnumerateArray().Select(row => row.TryGetProperty(field, out var value)
+                    ? value.ValueKind == JsonValueKind.String
+                        ? long.Parse(value.GetString()!, NumberStyles.AllowLeadingSign, CultureInfo.InvariantCulture)
+                        : value.GetInt64()
+                    : 0L).ToHashSet();
+            if (ids.Count > 0) masterIds.Add(table, ids.ToFrozenSet());
+        }
+        RequiredMasterIds = masterIds.ToFrozenDictionary(StringComparer.Ordinal);
         _otherInfo = _schema.Encode("UserOtherInfo", snapshot.GetProperty("OtherInfo"));
         var status = account.GetProperty("UserStatusList");
         if (status.ValueKind != JsonValueKind.Array || status.GetArrayLength() != 1)
@@ -166,6 +186,29 @@ public sealed class AccountExportStore
     public byte[] CreateWriteTemplate(IHeaderDictionary headers) =>
         Encode(_schema.GetField("ApiResponse", "PostPvtStorePurchaseRestartSteam").Number, [], false, headers);
 
+    public void ValidateEndpointSchema(string message, JsonElement payload)
+    {
+        _schema.GetField("ApiRequest", message);
+        _schema.GetField("ApiResponse", message);
+        _schema.Encode(message + "Response", payload);
+    }
+
+    public byte[] CreateEndpointResponse(
+        string message, byte[] requestBody, JsonElement payload, IHeaderDictionary headers,
+        bool validateRequest = true, bool includeUser = true)
+    {
+        if (validateRequest)
+        {
+            var request = ProtobufWire.Parse(ApiTransport.DecodeRequest(requestBody));
+            int number = _schema.GetField("ApiRequest", message).Number;
+            var field = request.SingleOrDefault(field => field.Number == number && field.WireType == 2)
+                ?? throw new InvalidDataException($"Request has no {message} payload.");
+            ProtobufWire.Parse(field.Value);
+        }
+        return Encode(_schema.GetField("ApiResponse", message).Number,
+            _schema.Encode(message + "Response", payload), false, headers, includeUser);
+    }
+
     public byte[]? RemoveCapturedAccountState(byte[] body, IHeaderDictionary headers)
     {
         SetClock(headers);
@@ -182,15 +225,19 @@ public sealed class AccountExportStore
         return ApiTransport.EncodeResponse(ProtobufWire.Encode(root), headers);
     }
 
-    private byte[] Encode(int responseNumber, byte[] value, bool fullAccount, IHeaderDictionary headers)
+    private byte[] Encode(int responseNumber, byte[] value, bool fullAccount, IHeaderDictionary headers, bool includeUser = true)
     {
-        var common = ProtobufWire.Encode([
-            ProtoField.LengthDelimited(_schema.GetField("CommonResponse", "User").Number, CreateUser(fullAccount)),
-        ]);
-        var plain = ProtobufWire.Encode([
-            ProtoField.LengthDelimited(_schema.GetField("ApiResponse", "Common").Number, common),
-            ProtoField.LengthDelimited(responseNumber, value),
-        ]);
+        var fields = new List<ProtoField>();
+        if (includeUser)
+        {
+            var common = ProtobufWire.Encode([
+                ProtoField.LengthDelimited(_schema.GetField("CommonResponse", "User").Number, CreateUser(fullAccount)),
+            ]);
+            fields.Add(ProtoField.LengthDelimited(_schema.GetField("ApiResponse", "Common").Number, common));
+        }
+        // A present Common message requires User in the client's success callback.
+        fields.Add(ProtoField.LengthDelimited(responseNumber, value));
+        var plain = ProtobufWire.Encode(fields);
         SetClock(headers);
         return ApiTransport.EncodeResponse(plain, headers);
     }

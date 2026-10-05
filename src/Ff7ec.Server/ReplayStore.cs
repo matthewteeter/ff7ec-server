@@ -34,10 +34,11 @@ public sealed class ReplayStore
 
     public int Count => _byKey.Count;
 
-    public ReplayStore(ILogger<ReplayStore> logger, string capturesRoot)
+    public ReplayStore(ILogger<ReplayStore> logger, string capturesRoot, bool loadCaptures = true)
     {
         _logger = logger;
-        _byKey = Load(capturesRoot, logger);
+        _byKey = loadCaptures ? Load(capturesRoot, logger) : new();
+        if (!loadCaptures) logger.LogInformation("STANDALONE mode: replay loading is disabled; no capture files are read.");
     }
 
     public bool TryGet(string host, string method, string pathAndQuery, out CapturedResponse response) =>

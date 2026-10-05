@@ -70,21 +70,6 @@ if (-not $ConfigPath -and $Action -eq "Apply") {
     $needsGame = @($scan | Where-Object { $_ -like "INSTALLED:*" }).Count -gt 0
 }
 if ($needsGame -and -not $env:FF7EC_GAME_DIRECTORY) {
-    $steam = Get-ItemProperty -LiteralPath "HKCU:\Software\Valve\Steam" -ErrorAction SilentlyContinue
-    $steamRoot = if ($steam -and $steam.SteamPath) { $steam.SteamPath } else {
-        Join-Path ${env:ProgramFiles(x86)} "Steam"
-    }
-    $libraries = @($steamRoot)
-    $libraryFile = Join-Path $steamRoot "steamapps\libraryfolders.vdf"
-    if (Test-Path -LiteralPath $libraryFile -PathType Leaf) {
-        $libraries += [regex]::Matches((Get-Content -LiteralPath $libraryFile -Raw), '"path"\s*"([^"]+)"') |
-            ForEach-Object { $_.Groups[1].Value.Replace('\\', '\') }
-    }
-    $env:FF7EC_GAME_DIRECTORY = $libraries | ForEach-Object {
-        Join-Path $_ "steamapps\common\FF7EC"
-    } | Where-Object { Test-Path -LiteralPath (Join-Path $_ "octo") -PathType Container } | Select-Object -First 1
-    if (-not $env:FF7EC_GAME_DIRECTORY) {
-        throw "FF7EC installation not found in Steam libraries. Set FF7EC_GAME_DIRECTORY to the game folder containing 'octo'."
-    }
+    $env:FF7EC_GAME_DIRECTORY = & (Join-Path $PSScriptRoot "Get-Ff7ecGameDirectory.ps1")
 }
 Invoke-OverrideTool $toolArgs

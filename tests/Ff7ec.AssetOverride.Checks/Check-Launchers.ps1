@@ -10,7 +10,7 @@ $copy = Join-Path $FixtureRoot "repository"
 $launcher = Join-Path $copy "launcher"
 $server = Join-Path $copy "src\Ff7ec.Server"
 New-Item -ItemType Directory -Path $launcher, $server -Force | Out-Null
-foreach ($name in @("Set-Ff7ecAssetOverride.ps1", "Get-Ff7ecPreservationRoot.ps1", "Start-Ff7ecOffline.ps1", "Stop-Ff7ecOffline.ps1")) {
+foreach ($name in @("Set-Ff7ecAssetOverride.ps1", "Get-Ff7ecPreservationRoot.ps1", "Get-Ff7ecGameDirectory.ps1", "Start-Ff7ecOffline.ps1", "Stop-Ff7ecOffline.ps1")) {
     Copy-Item -LiteralPath (Join-Path $Repository "launcher\$name") -Destination (Join-Path $launcher $name) -Force
 }
 $settings = @{

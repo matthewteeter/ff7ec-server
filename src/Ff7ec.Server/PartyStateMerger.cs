@@ -28,15 +28,18 @@ public sealed class PartyStateMerger
     private readonly PartySettingsStore _store;
     private readonly StoryStateStore _storyStore;
     private readonly ILogger<PartyStateMerger> _logger;
+    private readonly bool _failOnInvalidData;
 
     public PartyStateMerger(
         PartySettingsStore store,
         StoryStateStore storyStore,
-        ILogger<PartyStateMerger> logger)
+        ILogger<PartyStateMerger> logger,
+        bool failOnInvalidData = false)
     {
         _store = store;
         _storyStore = storyStore;
         _logger = logger;
+        _failOnInvalidData = failOnInvalidData;
     }
 
     /// <summary>
@@ -218,6 +221,8 @@ public sealed class PartyStateMerger
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "Could not merge persisted party settings into replayed response for user {UserId}.", userId);
+            if (_failOnInvalidData)
+                throw new InvalidDataException("Cannot apply persisted standalone settings.", ex);
             return null;
         }
     }
@@ -241,6 +246,8 @@ public sealed class PartyStateMerger
             }
             catch (Exception ex)
             {
+                if (_failOnInvalidData)
+                    throw new InvalidDataException("A persisted standalone setting could not be decoded.", ex);
                 _logger.LogDebug(ex, "Ignoring an unreadable persisted party write from {Endpoint}.", record.Endpoint);
             }
         }

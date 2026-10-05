@@ -18,13 +18,21 @@
 
 .PARAMETER ProtocolSchemaPath
     Optional override for the bundled versioned protocol-schema JSON file.
+
+.PARAMETER Standalone
+    Use exported account JSON and installed content without loading any captures.
+
+.PARAMETER GameDirectory
+    FF7EC installation for standalone mode. Otherwise discover it in Steam libraries.
 #>
 param(
     [switch]$LaunchGame,
     [switch]$SkipAssetOverrides,
     [string]$AccountJsonPath,
     [string]$ProtocolAssemblyPath,
-    [string]$ProtocolSchemaPath
+    [string]$ProtocolSchemaPath,
+    [switch]$Standalone,
+    [string]$GameDirectory
 )
 
 $ErrorActionPreference = "Stop"
@@ -34,6 +42,12 @@ $appsettings = Get-Content -LiteralPath (Join-Path $serverProject "appsettings.j
 $certDir = [IO.Path]::GetFullPath([IO.Path]::Combine($serverProject, $appsettings.Ff7ec.CertDirectory))
 $hostnames = $appsettings.Ff7ec.Hostnames
 $caCerPath = Join-Path $certDir "ff7ec-offline-ca.cer"
+if ($Standalone -and [string]::IsNullOrWhiteSpace($AccountJsonPath)) {
+    throw "Standalone mode requires -AccountJsonPath."
+}
+if (-not $Standalone -and -not [string]::IsNullOrWhiteSpace($GameDirectory)) {
+    throw "-GameDirectory requires -Standalone."
+}
 if ([string]::IsNullOrWhiteSpace($AccountJsonPath) -and
     (-not [string]::IsNullOrWhiteSpace($ProtocolAssemblyPath) -or -not [string]::IsNullOrWhiteSpace($ProtocolSchemaPath))) {
     throw "Protocol overrides require -AccountJsonPath."
@@ -50,13 +64,22 @@ if (-not [string]::IsNullOrWhiteSpace($ProtocolAssemblyPath)) {
 if (-not [string]::IsNullOrWhiteSpace($ProtocolSchemaPath)) {
     $ProtocolSchemaPath = (Resolve-Path -LiteralPath $ProtocolSchemaPath).ProviderPath
 }
+if ($Standalone) {
+    $GameDirectory = & (Join-Path $PSScriptRoot "Get-Ff7ecGameDirectory.ps1") -GameDirectory $GameDirectory
+    if (-not (Test-Path -LiteralPath (Join-Path $GameDirectory "FF7EC_Data\StreamingAssets\MasterData\index.json") -PathType Leaf)) {
+        throw "Standalone mode requires installed masterdata: $GameDirectory"
+    }
+    $standaloneStateRoot = Join-Path (& (Join-Path $PSScriptRoot "Get-Ff7ecPreservationRoot.ps1")) "single-player"
+}
 
 Write-Host "=== FF7EC Offline Server launcher ===" -ForegroundColor Cyan
 
 $overrideManager = Join-Path $PSScriptRoot "Set-Ff7ecAssetOverride.ps1"
 $newlyAppliedOverrides = [System.Collections.Generic.List[string]]::new()
 try {
-    if (-not $SkipAssetOverrides) {
+    if ($Standalone) {
+        Write-Host "Standalone single-player: captures and launcher-managed asset overrides are disabled."
+    } elseif (-not $SkipAssetOverrides) {
         $status = @(& $overrideManager Status)
         $previouslyApplied = @($status | Where-Object { $_ -like "APPLIED:*" } |
             ForEach-Object { $_.Substring("APPLIED: ".Length) })
@@ -76,8 +99,20 @@ try {
 
 # 1. Start the replay server in its own visible window (so REPLAY/GAP log lines are
 #    visible while you play), which also generates the CA/leaf certs on first run.
-Write-Host "Starting replay server..."
+if ($Standalone) { Write-Host "Starting standalone single-player server..." }
+else { Write-Host "Starting replay server..." }
+if (Get-NetTCPConnection -LocalPort $appsettings.Ff7ec.ListenPort -State Listen -ErrorAction SilentlyContinue) {
+    throw "Port $($appsettings.Ff7ec.ListenPort) is already in use. Stop the existing server before starting this mode."
+}
 $serverCommand = "Set-Location -LiteralPath '$($serverProject.Replace("'", "''"))'; dotnet run --no-launch-profile"
+if ($Standalone) {
+    $serverCommand = "`$env:Ff7ec__Standalone__Enabled = 'true'; " +
+        "`$env:Ff7ec__Standalone__GameDirectory = '$($GameDirectory.Replace("'", "''"))'; " +
+        "`$env:Ff7ec__DataDirectory = '$($standaloneStateRoot.Replace("'", "''"))'; " +
+        "`$env:Ff7ec__GapsDirectory = '$((Join-Path $standaloneStateRoot 'gaps').Replace("'", "''"))'; " + $serverCommand
+} else {
+    $serverCommand = "`$env:Ff7ec__Standalone__Enabled = 'false'; " + $serverCommand
+}
 if (-not [string]::IsNullOrWhiteSpace($AccountJsonPath)) {
     $serverCommand = "`$env:Ff7ec__AccountExport__JsonPath = '$($AccountJsonPath.Replace("'", "''"))'; " + $serverCommand
 }

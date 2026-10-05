@@ -20,12 +20,14 @@ public sealed class PartySettingsStore
 
     private readonly string _storePath;
     private readonly ILogger<PartySettingsStore> _logger;
+    private readonly bool _failOnInvalidData;
     private readonly SemaphoreSlim _writeLock = new(1, 1);
     private PartySettingsDocument _document;
 
-    public PartySettingsStore(ILogger<PartySettingsStore> logger, string dataDirectory)
+    public PartySettingsStore(ILogger<PartySettingsStore> logger, string dataDirectory, bool failOnInvalidData = false)
     {
         _logger = logger;
+        _failOnInvalidData = failOnInvalidData;
         Directory.CreateDirectory(dataDirectory);
         _storePath = Path.Combine(dataDirectory, StoreFileName);
         _document = Load();
@@ -119,6 +121,11 @@ public sealed class PartySettingsStore
         }
         catch (Exception ex)
         {
+            if (_failOnInvalidData)
+            {
+                _logger.LogError(ex, "Standalone party settings could not be read from {Path}; startup is refused.", _storePath);
+                throw new InvalidDataException("Cannot read standalone party settings; existing data was not discarded.", ex);
+            }
             _logger.LogError(ex,
                 "Party settings store '{Path}' could not be read; starting from an empty in-memory state.",
                 _storePath);
@@ -203,4 +210,3 @@ public sealed class PartySettingsStore
         public required string BodyBase64 { get; init; }
     }
 }
-

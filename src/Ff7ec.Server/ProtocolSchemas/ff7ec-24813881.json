@@ -8,6 +8,8 @@
       "UserAccessoryId": [1,"int64"]
     },
     "ApiRequest": {
+      "GetCheck": [201,"bytes"],
+      "PostAnnouncementList": [203,"bytes"],
       "PostAuthSession": [303,"bytes"],
       "PostPvtFriendList": [481,"bytes"],
       "PostPvtFriendReceiveList": [483,"bytes"],
@@ -16,11 +18,15 @@
       "PostPvtGiftList": [376,"bytes"],
       "PostPvtGuildMemberList": [570,"bytes"],
       "PostPvtGuildWatchList": [569,"bytes"],
+      "PostPvtNoticeCheck": [488,"bytes"],
+      "PostPvtStorePurchaseRestartSteam": [2001,"bytes"],
       "PostPvtUserDenyList": [587,"bytes"],
       "PostPvtUserTitle": [353,"bytes"]
     },
     "ApiResponse": {
       "Common": [101,"CommonResponse"],
+      "GetCheck": [201,"GetCheckResponse"],
+      "PostAnnouncementList": [203,"PostAnnouncementListResponse"],
       "PostAuthSession": [303,"bytes"],
       "PostPvtFriendList": [481,"PostPvtFriendListResponse"],
       "PostPvtFriendReceiveList": [483,"PostPvtFriendReceiveListResponse"],
@@ -29,9 +35,35 @@
       "PostPvtGiftList": [376,"PostPvtGiftListResponse"],
       "PostPvtGuildMemberList": [570,"PostPvtGuildMemberListResponse"],
       "PostPvtGuildWatchList": [569,"PostPvtGuildWatchListResponse"],
+      "PostPvtNoticeCheck": [488,"PostPvtNoticeCheckResponse"],
       "PostPvtStorePurchaseRestartSteam": [2001,"bytes"],
       "PostPvtUserDenyList": [587,"PostPvtUserDenyListResponse"],
       "PostPvtUserTitle": [353,"bytes"]
+    },
+    "GetCheckResponse": {
+      "IsMaintenance": [1,"bool"],
+      "IsForceUpdate": [3,"bool"],
+      "IsReview": [4,"bool"],
+      "ApiUrl": [5,"string"],
+      "TermsUpdateTimes": [6,"int64"],
+      "OctoVersion": [7,"int32"],
+      "OctoUrl": [8,"string"],
+      "WebviewUrl": [9,"string"],
+      "ChatUrl": [10,"string"],
+      "IsServiceUpdate": [11,"bool"]
+    },
+    "PostAnnouncementListResponse": {
+      "Total": [2,"int64"]
+    },
+    "PostPvtNoticeCheckResponse": {
+      "IsReceiveFriendRequest": [1,"bool"],
+      "IsRefreshGuild": [4,"bool"],
+      "ChatGuildLatestMessageId": [5,"string"],
+      "GuildJoinRequestLastReceiveDatetime": [6,"int64"],
+      "UnreadLastUserPersonalMessageId": [7,"int64"]
+    },
+    "PostPvtStorePurchaseRestartSteamResponse": {
+      "BridgeTransactionId": [1,"string"]
     },
     "AwardInfo": {
       "AwardCount": [2,"int64"],

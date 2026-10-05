@@ -146,6 +146,14 @@ internal sealed class ProtocolSchema
         }
         foreach (string name in new[] { "PostAuthSession", "PostPvtUserTitle", "PostPvtStorePurchaseRestartSteam" })
             responses.Add(name, GetField("ApiResponse", name) with { Type = "Google.Protobuf.ByteString" });
+        foreach (string name in new[] { "GetCheck", "PostAnnouncementList", "PostPvtNoticeCheck", "PostPvtStorePurchaseRestartSteam" })
+        {
+            if (!GetMessage("ApiRequest").Fields.ContainsKey(name)) continue;
+            requests[name] = GetField("ApiRequest", name) with { Type = "Google.Protobuf.ByteString" };
+            var field = GetField("ApiResponse", name);
+            responses[name] = field;
+            Visit(GetMessage(field.Type));
+        }
         messages.Add("ApiRequest", new Message("ApiRequest", requests));
         messages.Add("ApiResponse", new Message("ApiResponse", responses));
         Visit(GetMessage("PostPvtGiftListRequest"));

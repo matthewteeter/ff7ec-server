@@ -21,12 +21,14 @@ public sealed class StoryStateStore
 
     private readonly string _storePath;
     private readonly ILogger<StoryStateStore> _logger;
+    private readonly bool _failOnInvalidData;
     private readonly SemaphoreSlim _writeLock = new(1, 1);
     private StoryStateDocument _document;
 
-    public StoryStateStore(ILogger<StoryStateStore> logger, string dataDirectory)
+    public StoryStateStore(ILogger<StoryStateStore> logger, string dataDirectory, bool failOnInvalidData = false)
     {
         _logger = logger;
+        _failOnInvalidData = failOnInvalidData;
         Directory.CreateDirectory(dataDirectory);
         _storePath = Path.Combine(dataDirectory, StoreFileName);
         _document = Load();
@@ -212,6 +214,11 @@ public sealed class StoryStateStore
         }
         catch (Exception ex)
         {
+            if (_failOnInvalidData)
+            {
+                _logger.LogError(ex, "Standalone story state could not be read from {Path}; startup is refused.", _storePath);
+                throw new InvalidDataException("Cannot read standalone story state; existing data was not discarded.", ex);
+            }
             _logger.LogError(ex,
                 "Story state store '{Path}' could not be read; starting from an empty in-memory state.",
                 _storePath);

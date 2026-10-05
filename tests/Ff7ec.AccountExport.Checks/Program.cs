@@ -248,7 +248,20 @@ try
     var bundledTitle = bundledExport.CreateResponse(Request("/api/pvt/user/title"), EncryptRequest(353, []), headers);
     Check(Tables(Decode(bundledTitle, headers)).Count == 2, "Bundled schema failed to encode source-only fixture.");
     if (args.Contains("--http"))
+    {
         await HttpChecks(bundledExport, bundledJsonPath, AccountExportStore.DefaultProtocolSchemaPath, 2, useDefaultSchema: true);
+        checks += await StandaloneChecks.Run(root, bundledJsonPath, 2);
+        int installedGameIndex = Array.IndexOf(args, "--installed-game");
+        if (installedGameIndex >= 0)
+        {
+            if (args.Length < 2 || installedGameIndex + 1 >= args.Length)
+                throw new ArgumentException("--installed-game requires a private export, schema, and game directory.");
+            using var privateJson = JsonDocument.Parse(File.ReadAllBytes(args[0]));
+            int privateRows = privateJson.RootElement.GetProperty("AccountInfo").EnumerateObject()
+                .Where(property => property.Value.ValueKind == JsonValueKind.Array).Sum(property => property.Value.GetArrayLength());
+            checks += await StandaloneChecks.Run(root, args[0], privateRows, args[installedGameIndex + 1]);
+        }
+    }
     Console.WriteLine($"Passed {checks} account-export checks.");
 }
 finally

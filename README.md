@@ -91,7 +91,7 @@ dotnet run --project tools\Ff7ec.ProtocolSchema -- `
 ```
 
 The generator reads no account JSON. It exports only the reachable account/list
-message graph and the envelope tags needed by the supported handlers, with stable
+and supported bootstrap response graphs plus their envelope tags, with stable
 ordering. Enums use numeric mappings; enum labels and unrelated APIs are excluded.
 Schema fields are `[tag, type]`, or `[tag, type, true]` for repeated fields, under
 each message name. The file's `formatVersion` is currently `1`.
@@ -109,7 +109,8 @@ The server generates encrypted, LZ4-compressed protobuf bodies for:
 | `/api/pvt/user/deny/list` | Block list |
 | `/api/pvt/guild/member/list`, `/api/pvt/guild/watch/list` | Guild lists |
 
-Account-response **bodies are not replayed** for these endpoints. A successful
+In replay-assisted export mode, account-response **bodies are not replayed** for
+these endpoints. A successful
 secure header template for the same host/account is still required: the exact
 endpoint capture is preferred, with title, Steam purchase-restart, or session
 headers as fallbacks. Missing headers return HTTP 503. Assets, `/api/check`, and
@@ -130,7 +131,90 @@ not stale captured account bodies. The original export is read-only; restart the
 server to reload an edited export. Use a separate data directory if old local
 overlays should not override the imported settings.
 
-Run the source-only checks (including an isolated HTTPS server with header-only
+#### Standalone single-player mode (no captures)
+
+This mode is experimental. Real-client validation reaches authentication and
+account/title loading, but Home requires masterdata matching the exported
+account. The server rejects missing master references rather than discarding
+owned characters, weapons, or skills. Generated endpoint checks alone do not
+establish Home-screen compatibility; in-game menu validation is not yet complete.
+
+For the final Steam build **24813881**, use the JSON export together with an
+installed, already-downloaded game:
+
+```powershell
+.\launcher\Start-Ff7ecOffline.ps1 -Standalone `
+  -AccountJsonPath "D:\PrivateFF7EC\account-export.json" -LaunchGame
+```
+
+Steam libraries are discovered automatically. Pass `-GameDirectory` or set
+`FF7EC_GAME_DIRECTORY` to choose an installation explicitly. Steam's own client
+and login/offline-mode requirements still apply; the server does not replace
+Steam authentication.
+
+Standalone mode **never reads the replay store**, even if captures exist or
+contain invalid JSON. It listens only on `127.0.0.1`, generates secure response
+headers and a local token, and disables launcher-managed asset overrides. It
+does not contact official game APIs. The export is read-only; the game's local
+account must match its numeric user ID.
+
+Supported local APIs include `/api/check`, session/title loading, empty public
+announcements and live-notification checks, Steam purchase-restart acknowledgement
+without purchasing anything, and the exported gift/friend/guild lists above.
+Boot destinations use bare hostnames because the client adds `https://`; the
+chat destination remains local, but chat APIs are not implemented.
+Public boot and announcement responses omit `Common` entirely. When `Common`
+is present, the client requires `Common.User` with update/delete messages before
+completing its success callback; an empty `Common` can leave `Connecting` stuck.
+Account tables provide roster, inventory, progression history, and existing
+parties for browsing. Solo party edits, wallpaper changes, and existing story
+selection/result acknowledgements persist locally. Story dungeon start/end
+acknowledgements remain available, but do not award progression.
+
+The local content provider reads the original Octo manifest and cache plus
+`FF7EC_Data\StreamingAssets\MasterData\index.json`. Built-in indexes can point to
+starter masterdata that does not contain the exported roster, weapons, or limit
+breaks. Standalone checks those IDs against the decrypted MessagePack tables,
+and uses a uniquely compatible, hash-verified installed catalog when the indexed
+one is incompatible. Missing or ambiguous compatible content fails at startup
+instead of leaving the client stuck while applying the title response.
+It serves the full manifest,
+an empty delta at the installed revision, protobuf revision lookup, SHA-256-addressed
+master/language catalogs and parts, and cached bundles. Masterdata is served in
+its original encrypted format; the catalogs are decoded only for prerequisite
+validation. Catalogs and referenced parts are verified at startup; served files
+are checked against their hashes and sizes. Missing bundles or changed files
+return HTTP 503, not live downloads or placeholder content.
+The revision endpoint returns an Octo database protobuf with the installed
+revision in field 1; the client does not accept JSON at that endpoint.
+Both the legacy and Steam-rewritten Octo cache encryption formats are accepted
+only after their embedded MD5 integrity checks pass, so launching the game does
+not prevent the server from reading its manifest on the next startup.
+
+Only explicitly implemented routes succeed. Unknown APIs, multiplayer writes,
+battle start/end, purchases, and unsupported progression return HTTP 501 and
+are logged in the private gaps directory. This is a **boot/menu and supported
+settings implementation**, not complete single-player gameplay: gift claims,
+growth, battle rewards, and other account mutations are not implemented.
+Real-client menu coverage must still be validated; an exported table or a
+passing protocol check is not proof that every screen works.
+
+The launcher stores settings under
+`<preservationRoot>\single-player\standalone` and new request gaps under
+`<preservationRoot>\single-player\gaps`, separate from replay-mode overlays.
+For direct startup, set `Ff7ec:Standalone:Enabled=true`,
+`Ff7ec:Standalone:GameDirectory`, and `Ff7ec:AccountExport:JsonPath`.
+Standalone appends `standalone` to the configured `Ff7ec:DataDirectory`;
+existing files in the parent directory are never loaded. Malformed saved state
+fails startup, and unreadable saved setting payloads fail the title request
+instead of silently reverting to the export.
+When finished, close the server window and run
+`.\launcher\Stop-Ff7ecOffline.ps1 -KeepAssetOverrides` to remove offline routing
+without touching pre-existing override state.
+
+Run the source-only checks (including capture-free HTTPS boot, local-content
+integrity/missing-file failures, isolated settings and restart persistence, plus
+an isolated replay-assisted HTTPS server with header-only
 account templates, plus a synthetic replay response to check stale-state suppression):
 
 ```powershell
@@ -141,6 +225,16 @@ dotnet run --project tests\Ff7ec.AccountExport.Checks -- --http
 Optionally pass your private JSON and a matching schema JSON (or developer DLL)
 before `--http` to verify the complete export as well. Neither private account
 data nor dummy assemblies are copied into source control.
+
+To additionally check the real export against installed content without loading
+any real captures:
+
+```powershell
+dotnet run --project tests\Ff7ec.AccountExport.Checks -- `
+  "D:\PrivateFF7EC\account-export.json" `
+  "src\Ff7ec.Server\ProtocolSchemas\ff7ec-24813881.json" `
+  --http --default-schema --installed-game "D:\SteamLibrary\steamapps\common\FF7EC"
+```
 
 ### Writable-setting limits
 
@@ -210,9 +304,9 @@ encrypted account-state payloads. The `.pfx` files contain private TLS keys. A r
 scripts, importer, solution, and README are safe to commit after confirming ignored files
 are not force-added.
 
-A clone of the source repository will therefore not contain a playable account snapshot;
-each user must privately import their own capture and let the server generate local
-certificates.
+A clone of the source repository will therefore not contain a playable account
+snapshot. Each user must privately import their own capture, or supply their
+export and installed content for standalone mode, and generate local certificates.
 
 `src\Ff7ec.Octo` preserves the existing game-wide manifest app key and IV seed,
 not account credentials or TLS private keys. Both the server and asset-override
@@ -221,6 +315,9 @@ needed for manifest encryption/decryption. The library supports the encrypted
 AES-with-MD5 SecureFile format used by the override tool's manifest backups and
 retains the server's raw SecureFile reading support. The override tool still
 requires encrypted manifests.
+
+`MasterDataCrypto` similarly contains the application-wide content decryption key
+used to validate installed catalogs, not account credentials or private TLS keys.
 
 ## Running it
 
@@ -390,9 +487,12 @@ refreshes coverage. Restart the server (or re-run `dotnet run`) to pick up new c
 
 ## Filling gaps
 
-Any request the server doesn't have a captured response for is logged to `gaps/` (full
+In replay mode, any request the server doesn't have a captured response for is logged to `gaps/` (full
 headers + body) and returns HTTP 404. Check that folder to see what's still missing,
 then capture more real traffic covering those calls before the real servers disappear.
+Standalone mode instead logs unsupported local routes and returns HTTP 501.
+Adding captures does not extend standalone coverage; an explicit handler or
+installed content is required.
 
 ## Current status (2026-09-11)
 
